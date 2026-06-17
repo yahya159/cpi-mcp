@@ -146,6 +146,40 @@ The client spawns the MCP server as a child process, connects via stdio, and cal
 > directory, so the server's `dotenv` finds `mcp-server/.env`. (Build the server at least once —
 > `npm run build` in `mcp-server` — before running the client, since it runs `dist/index.js`.)
 
+## Web Dashboard (local)
+
+A simple browser dashboard is included for visual, click-driven monitoring. It is a thin
+HTTP layer (`src/web.ts`, Express) over the **same** `cpiClient` functions the MCP tools use —
+so the browser never sees SAP credentials (they stay in `mcp-server/.env`).
+
+```bash
+cd mcp-server
+npm install
+npm run web
+```
+
+Then open **http://localhost:5174** (override with `WEB_PORT`).
+
+Features:
+- Connection check showing which tenant you are pointed at.
+- Time-window buttons: **Last 24 hours / 7 days / 30 days**.
+- Health summary cards (total / completed / failed / escalated + HEALTHY/WARNING/CRITICAL).
+- Tables of failed and recent messages with human-readable timestamps.
+- **View error** on any failed message opens a panel with the full "Last Error" text and the failing step id.
+
+REST endpoints (used by the frontend, also callable directly):
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/check` | Connectivity + current tenant base URL |
+| `GET /api/recent?top=20` | Recent messages |
+| `GET /api/failed?lastHours=24&top=100` | Failed/escalated in a window |
+| `GET /api/health-summary?lastHours=24` | Aggregated health summary |
+| `GET /api/error/:guid` | Full error text for one message |
+
+> This dashboard uses the single tenant configured in `.env`. Letting a user connect to *any*
+> tenant by entering their own service-key values (multi-tenant) is a separate enhancement.
+
 ## Testing $metadata
 
 Before relying on specific OData field names, verify what your tenant exposes:
@@ -196,6 +230,7 @@ sap-cpi-monitoring-mcp/
 ├── mcp-server/
 │   ├── src/
 │   │   ├── index.ts              # Entry point, env validation, stdio transport
+│   │   ├── web.ts                # Local web dashboard (Express HTTP layer)
 │   │   ├── server.ts             # McpServer creation and tool registration
 │   │   ├── cpi/
 │   │   │   ├── auth.ts           # OAuth2 client credentials with token caching
@@ -211,6 +246,10 @@ sap-cpi-monitoring-mcp/
 │   │       ├── getMessageErrorDetails.ts
 │   │       ├── getLastErrorForIflow.ts
 │   │       └── getHealthSummary.ts
+│   ├── public/                   # Web dashboard frontend (HTML/CSS/JS)
+│   │   ├── index.html
+│   │   ├── style.css
+│   │   └── app.js
 │   ├── .env.example
 │   ├── package.json
 │   └── tsconfig.json

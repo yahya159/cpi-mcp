@@ -5,7 +5,7 @@
  * suitable for MCP tool responses.
  */
 
-import type { MessageProcessingLog } from "./cpiClient.js";
+import { formatODataDate, type MessageProcessingLog } from "./cpiClient.js";
 
 export interface MessageSummary {
   messageGuid: string;
@@ -30,8 +30,8 @@ export function toMessageSummary(log: MessageProcessingLog): MessageSummary {
     messageGuid: log.MessageGuid ?? "",
     iflowName: log.IntegrationFlowName ?? "N/A",
     status: log.Status ?? "",
-    logStart: log.LogStart ?? "",
-    logEnd: log.LogEnd ?? "",
+    logStart: formatODataDate(log.LogStart),
+    logEnd: formatODataDate(log.LogEnd),
     sender: log.Sender ?? "N/A",
     receiver: log.Receiver ?? "N/A",
     correlationId: log.CorrelationId ?? "",

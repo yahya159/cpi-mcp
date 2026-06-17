@@ -59,6 +59,22 @@ function toODataDateTime(date: Date): string {
   return `datetime'${stripped}'`;
 }
 
+/**
+ * Convert an OData v2 date string into a readable ISO-8601 timestamp.
+ *
+ * SAP CPI returns timestamps as "/Date(1781706180598)/" (epoch milliseconds,
+ * optionally with a "+0000" offset). This turns that into "2026-06-17T05:03:00.598Z".
+ * If the value is already a plain string or cannot be parsed, it is returned as-is.
+ */
+export function formatODataDate(value: unknown): string {
+  if (typeof value !== "string" || value === "") return "";
+  const match = /\/Date\((-?\d+)(?:[+-]\d+)?\)\//.exec(value);
+  if (!match) return value;
+  const ms = Number(match[1]);
+  if (!Number.isFinite(ms)) return value;
+  return new Date(ms).toISOString();
+}
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -472,7 +488,7 @@ export async function fetchHealthSummary(lastHours: number): Promise<{
         latestFailure = {
           iflowName: name,
           messageGuid: msg.MessageGuid,
-          timestamp: msg.LogStart ?? "",
+          timestamp: formatODataDate(msg.LogStart),
           error: String(msg.Status ?? "FAILED"),
         };
       }
@@ -485,7 +501,7 @@ export async function fetchHealthSummary(lastHours: number): Promise<{
         latestFailure = {
           iflowName: name,
           messageGuid: msg.MessageGuid,
-          timestamp: msg.LogStart ?? "",
+          timestamp: formatODataDate(msg.LogStart),
           error: "ESCALATED",
         };
       }

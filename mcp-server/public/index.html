@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAP CPI Monitoring Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>SAP CPI Monitoring</h1>
+        <p id="tenant" class="tenant">Connecting…</p>
+      </div>
+      <button id="checkBtn" class="btn ghost">Test connection</button>
+    </header>
+
+    <main>
+      <section class="controls">
+        <span class="controls-label">Time window:</span>
+        <button class="btn range" data-hours="24">Last 24 hours</button>
+        <button class="btn range" data-hours="168">Last 7 days</button>
+        <button class="btn range" data-hours="720">Last 30 days</button>
+        <span class="spacer"></span>
+        <button id="refreshBtn" class="btn primary">Refresh</button>
+      </section>
+
+      <section id="status" class="status hidden"></section>
+
+      <!-- Health summary cards -->
+      <section class="cards" id="cards"></section>
+
+      <!-- Failed messages -->
+      <section class="panel">
+        <h2>Failed / escalated messages <span id="failedCount" class="pill">0</span></h2>
+        <div class="table-wrap">
+          <table id="failedTable">
+            <thead>
+              <tr>
+                <th>iFlow</th><th>Status</th><th>Start</th><th>Message GUID</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Recent messages -->
+      <section class="panel">
+        <h2>Recent messages</h2>
+        <div class="table-wrap">
+          <table id="recentTable">
+            <thead>
+              <tr>
+                <th>iFlow</th><th>Status</th><th>Start</th><th>Message GUID</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Error details drawer -->
+    <div id="drawer" class="drawer hidden">
+      <div class="drawer-panel">
+        <div class="drawer-head">
+          <h3>Error details</h3>
+          <button id="drawerClose" class="btn ghost">✕</button>
+        </div>
+        <div class="drawer-body">
+          <p><strong>Message:</strong> <span id="errGuid" class="mono"></span></p>
+          <p><strong>Failing step:</strong> <span id="errStep" class="mono">—</span></p>
+          <p><strong>Last error:</strong></p>
+          <pre id="errText" class="error-text">Loading…</pre>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
