@@ -22,6 +22,11 @@ const SERVER_SCRIPT =
   process.env.MCP_SERVER_SCRIPT ??
   path.resolve(__dirname, "../../mcp-server/dist/index.js");
 
+// The server loads its .env via dotenv, which resolves relative to the
+// process working directory. Launch the server child process with the
+// mcp-server folder as its cwd so it finds mcp-server/.env.
+const SERVER_CWD = path.resolve(__dirname, "../../mcp-server");
+
 function printSection(title: string): void {
   console.log(`\n${"=".repeat(60)}`);
   console.log(`  ${title}`);
@@ -51,6 +56,25 @@ function printResult(result: unknown): void {
   }
 }
 
+/** Extract the first messageGuid from a tool result that returned a JSON array. */
+function extractFirstGuid(result: unknown): string | null {
+  if (result && typeof result === "object" && "content" in result) {
+    for (const item of (result as { content: { type: string; text?: string }[] }).content) {
+      if (item.type === "text" && item.text) {
+        try {
+          const parsed = JSON.parse(item.text);
+          if (Array.isArray(parsed) && parsed[0]?.messageGuid) {
+            return parsed[0].messageGuid as string;
+          }
+        } catch {
+          // not JSON — ignore
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function main(): Promise<void> {
   console.log("SAP CPI Monitoring - MCP Client (test)");
   console.log("Connecting to MCP server via stdio...\n");
@@ -58,6 +82,7 @@ async function main(): Promise<void> {
   const transport = new StdioClientTransport({
     command: "node",
     args: [SERVER_SCRIPT],
+    cwd: SERVER_CWD,
   });
 
   const client = new Client({
@@ -120,6 +145,28 @@ async function main(): Promise<void> {
         arguments: { lastHours: 24 },
       });
       printResult(healthResult);
+    } catch (err) {
+      console.error("  Error:", err instanceof Error ? err.message : err);
+    }
+
+    // 5. Error Details for the most recent failure (chained lookup)
+    printSection("5. Error Details for latest failure (last 72h)");
+    try {
+      const failed = await client.callTool({
+        name: "get_failed_messages",
+        arguments: { top: 1, lastHours: 72 },
+      });
+      const guid = extractFirstGuid(failed);
+      if (!guid) {
+        console.log("No failed/escalated messages in the last 72h to inspect.");
+      } else {
+        console.log(`Found failed message ${guid}; fetching error details...\n`);
+        const details = await client.callTool({
+          name: "get_message_error_details",
+          arguments: { messageGuid: guid },
+        });
+        printResult(details);
+      }
     } catch (err) {
       console.error("  Error:", err instanceof Error ? err.message : err);
     }

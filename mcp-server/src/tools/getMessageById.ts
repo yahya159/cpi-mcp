@@ -20,10 +20,10 @@ export function registerGetMessageById(server: McpServer): void {
         messageGuid: z
           .string()
           .regex(
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-            "Must be a valid UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)",
+            /^[A-Za-z0-9_-]{8,80}$/,
+            "Must be a CPI MessageGuid (letters, digits, '_' or '-')",
           )
-          .describe("The MessageGuid (UUID) of the message to retrieve"),
+          .describe("The MessageGuid of the message to retrieve"),
       }),
     },
     async ({ messageGuid }) => {

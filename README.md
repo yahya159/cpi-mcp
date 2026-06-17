@@ -32,21 +32,37 @@ The server uses the **SAP CPI OData API** exposed by the **Process Integration R
 1. **Create a Service Instance:**
    - Go to SAP BTP Cockpit > your subaccount > Service Marketplace.
    - Find **Process Integration Runtime**.
-   - Create an instance with plan **integration-flow**.
-   - Under instance parameters, ensure the role `MonitoringDataRead` is included:
+   - Create an instance with plan **`api`** — this is the plan that grants access to the
+     monitoring **OData API** (`/api/v1/...`).
+   - Under instance parameters you may add the monitoring role:
      ```json
      {
        "roles": ["MonitoringDataRead"]
      }
      ```
 
+   > ⚠️ **Plan matters — use `api`, not `integration-flow`.**
+   > The `integration-flow` plan is for *sending messages to deployed iFlows at runtime*. Its
+   > service key `url` points at the **runtime** host (`...-rt.cfapps...`) and its token is
+   > **rejected (401)** by the OData API. Tokens from the `api`-plan instance are what the
+   > `/api/v1/MessageProcessingLogs` endpoint accepts. If you previously created an
+   > `integration-flow` instance and got 404s on `/api/v1/...` or a flat `Unauthorized`, this
+   > is why.
+
 2. **Create a Service Key:**
    - On the service instance, create a service key.
    - The key will contain: `url` (API base), `tokenurl`, `clientid`, `clientsecret`.
 
 3. **Required Roles/Scopes:**
-   - `MonitoringDataRead` — allows read access to Message Processing Logs and monitoring data.
-   - Without this role, API calls will return 403 Forbidden.
+   - With the `api` plan, the default scopes (`IntegrationOperationServer.read`,
+     `NodeManager.read`, etc.) already grant read access to Message Processing Logs.
+     `MonitoringDataRead` is a useful explicit role to add but may not be strictly required
+     depending on tenant version.
+
+   > 💡 **`CPI_API_BASE_URL` is the Tenant Management Node host** — the `url` field from the
+   > `api`-plan service key, e.g.
+   > `https://<tenant>.it-cpitrial05.cfapps.us10-001.hana.ondemand.com` (note: **no `-rt`**).
+   > Do not use the Integration Suite browser/tooling URL.
 
 ## Available MCP Tools
 
@@ -57,8 +73,13 @@ The server uses the **SAP CPI OData API** exposed by the **Process Integration R
 | `get_failed_messages` | Get failed/escalated messages within a time window |
 | `get_messages_by_iflow` | Get messages for a specific iFlow by name |
 | `get_message_by_id` | Get detailed info for a single message by its GUID |
+| `get_message_error_details` | Get the full "Last Error" text (and failing step id) for a message by its GUID |
 | `get_last_error_for_iflow` | Get the most recent error for a specific iFlow |
 | `get_cpi_health_summary` | Generate a health summary with counts and status |
+
+> **Typical failure-analysis flow:** call `get_last_error_for_iflow` (or `get_failed_messages`)
+> to find a failing message and its `MessageGuid`, then pass that GUID to
+> `get_message_error_details` to read the actual error / stack trace.
 
 ## Setup
 
@@ -90,13 +111,13 @@ cp .env.example .env
 Edit `.env` with values from your SAP BTP service key:
 
 ```env
-# Base URL — use the "url" field from the service key
-CPI_API_BASE_URL=https://<tenant>.it-cpi018.cfapps.eu10.hana.ondemand.com
+# Base URL — the "url" field from the api-plan service key (Tenant Management Node, no -rt)
+CPI_API_BASE_URL=https://<tenant>.it-cpitrialNN.cfapps.<region>.hana.ondemand.com
 
-# Token URL — use the "tokenurl" field from the service key
-CPI_TOKEN_URL=https://<subdomain>.authentication.eu10.hana.ondemand.com/oauth/token
+# Token URL — the "tokenurl" field from the service key
+CPI_TOKEN_URL=https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/token
 
-# Client credentials — use "clientid" and "clientsecret" from the service key
+# Client credentials — "clientid" and "clientsecret" from the service key
 CPI_CLIENT_ID=sb-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx!bXXXX|it!bXXXX
 CPI_CLIENT_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
@@ -120,6 +141,10 @@ npm run dev
 ```
 
 The client spawns the MCP server as a child process, connects via stdio, and calls the test tools.
+
+> **Note:** the test client launches the server child process with `mcp-server` as its working
+> directory, so the server's `dotenv` finds `mcp-server/.env`. (Build the server at least once —
+> `npm run build` in `mcp-server` — before running the client, since it runs `dist/index.js`.)
 
 ## Testing $metadata
 
@@ -157,8 +182,10 @@ If your tenant uses different names:
 | `OAuth authentication failed (401)` | Wrong client ID or secret | Verify credentials from service key |
 | `OAuth forbidden (403)` | Missing roles/scopes | Ensure service instance has `MonitoringDataRead` role |
 | `Cannot reach token endpoint` | Wrong token URL or network issue | Check `CPI_TOKEN_URL` and network/proxy settings |
-| `CPI API returned 404` | Wrong base URL or API path | Verify `CPI_API_BASE_URL` matches service key `url` |
+| `CPI API returned 404` on `/api/v1/...` | Using the **runtime** host (`...-rt...`) from an `integration-flow`-plan key | Recreate the instance with the **`api`** plan; use its `url` (no `-rt`) |
+| Flat `Unauthorized` / 401 from `/api/v1/...` with a valid token | Token is from an `integration-flow`-plan instance (wrong audience) | Use an **`api`**-plan service key |
 | `CPI OData bad request (400)` | Filter syntax error | Field names may differ — check `$metadata` |
+| `Invalid MessageGuid format` | Tenant uses token-style ids, not UUIDs | Already handled — ids like `AGoyrc...` are accepted |
 | `Request timed out` | Network issue or firewall | Check connectivity to SAP BTP |
 | `ECONNREFUSED` | Server not reachable | Verify URL and that the CPI tenant is running |
 
@@ -181,6 +208,7 @@ sap-cpi-monitoring-mcp/
 │   │       ├── getFailedMessages.ts
 │   │       ├── getMessagesByIflow.ts
 │   │       ├── getMessageById.ts
+│   │       ├── getMessageErrorDetails.ts
 │   │       ├── getLastErrorForIflow.ts
 │   │       └── getHealthSummary.ts
 │   ├── .env.example

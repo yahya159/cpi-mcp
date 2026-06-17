@@ -103,11 +103,15 @@ export async function odataGet<T = unknown>(
 }
 
 /**
- * Fetch raw (non-JSON) content from the CPI API, e.g. $metadata XML.
+ * Fetch raw (non-JSON) content from the CPI API, e.g. $metadata XML or the
+ * plain-text error body exposed at .../ErrorInformation/$value.
+ *
+ * @param accept  The Accept header to send (default "application/xml").
  */
 export async function odataGetRaw(
   config: CpiConfig,
   path: string,
+  accept = "application/xml",
 ): Promise<string> {
   const token = await getAccessToken(
     config.tokenUrl,
@@ -121,7 +125,7 @@ export async function odataGetRaw(
     const response = await axios.get<string>(url, {
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: "application/xml",
+        Accept: accept,
       },
       responseType: "text",
       timeout: 30_000,
@@ -132,17 +136,17 @@ export async function odataGetRaw(
     if (err instanceof AxiosError) {
       const status = err.response?.status;
       if (status === 401) {
-        throw new Error("CPI $metadata request returned 401. Check credentials.");
+        throw new Error("CPI raw request returned 401. Check credentials.");
       }
       if (status === 404) {
         throw new Error(
-          `CPI $metadata endpoint not found (404). Verify CPI_API_BASE_URL: ${config.apiBaseUrl}`,
+          `CPI raw resource not found (404) for path: ${path}.`,
         );
       }
       throw new Error(
-        `CPI $metadata request failed: ${status ?? err.code ?? err.message}`,
+        `CPI raw request failed: ${status ?? err.code ?? err.message}`,
       );
     }
-    throw new Error(`Unexpected error fetching CPI metadata: ${String(err)}`);
+    throw new Error(`Unexpected error fetching CPI raw resource: ${String(err)}`);
   }
 }

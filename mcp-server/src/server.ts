@@ -12,6 +12,7 @@ import { registerGetRecentMessages } from "./tools/getRecentMessages.js";
 import { registerGetFailedMessages } from "./tools/getFailedMessages.js";
 import { registerGetMessagesByIflow } from "./tools/getMessagesByIflow.js";
 import { registerGetMessageById } from "./tools/getMessageById.js";
+import { registerGetMessageErrorDetails } from "./tools/getMessageErrorDetails.js";
 import { registerGetLastErrorForIflow } from "./tools/getLastErrorForIflow.js";
 import { registerGetHealthSummary } from "./tools/getHealthSummary.js";
 
@@ -27,6 +28,7 @@ export function createServer(): McpServer {
   registerGetFailedMessages(server);
   registerGetMessagesByIflow(server);
   registerGetMessageById(server);
+  registerGetMessageErrorDetails(server);
   registerGetLastErrorForIflow(server);
   registerGetHealthSummary(server);
 

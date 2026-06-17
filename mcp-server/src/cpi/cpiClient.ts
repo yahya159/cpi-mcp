@@ -37,10 +37,16 @@ const MPL_SELECT_SUMMARY = [
   "ApplicationMessageType",
 ].join(",");
 
-const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// SAP CPI MessageGuids are NOT always dashed UUIDs. Many tenants use a
+// token-style id such as "AGoyrcQJPSGje_agRByePL8XRa_W". Accept both a
+// standard UUID and the token form (letters, digits, '_' and '-'). The
+// allowed character set excludes the single quote, so the value is safe to
+// embed in an OData key segment.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CPI_MSG_ID_RE = /^[A-Za-z0-9_-]{8,80}$/;
 
-function isValidGuid(value: string): boolean {
-  return GUID_RE.test(value);
+function isValidMessageId(value: string): boolean {
+  return UUID_RE.test(value) || CPI_MSG_ID_RE.test(value);
 }
 
 /**
@@ -257,9 +263,9 @@ export async function fetchMessagesByIflow(
 export async function fetchMessageById(
   messageGuid: string,
 ): Promise<MessageProcessingLog | null> {
-  if (!isValidGuid(messageGuid)) {
+  if (!isValidMessageId(messageGuid)) {
     throw new Error(
-      `Invalid MessageGuid format: "${messageGuid}". Expected UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).`,
+      `Invalid MessageGuid format: "${messageGuid}". Expected a UUID or a CPI token id (letters, digits, '_' or '-').`,
     );
   }
 
@@ -278,6 +284,65 @@ export async function fetchMessageById(
     }
     throw err;
   }
+}
+
+/**
+ * Detailed error information for a failed message.
+ *
+ * `errorText` is the long "Last Error" body shown in the CPI monitoring UI,
+ * retrieved from the ErrorInformation media resource (.../ErrorInformation/$value).
+ * `lastErrorModelStepId` identifies the iFlow model step that failed, when available.
+ */
+export interface MessageErrorDetails {
+  messageGuid: string;
+  lastErrorModelStepId?: string;
+  errorText: string;
+}
+
+/**
+ * Fetch the detailed error text for a single message by its GUID.
+ *
+ * Returns null when the message has no associated error information
+ * (e.g. it completed successfully).
+ */
+export async function fetchErrorDetails(
+  messageGuid: string,
+): Promise<MessageErrorDetails | null> {
+  if (!isValidMessageId(messageGuid)) {
+    throw new Error(
+      `Invalid MessageGuid format: "${messageGuid}". Expected a UUID or a CPI token id (letters, digits, '_' or '-').`,
+    );
+  }
+
+  const config = getConfig();
+  const base = `/api/v1/MessageProcessingLogs('${messageGuid}')/ErrorInformation`;
+
+  // The long error body is exposed as a text/plain media resource ($value).
+  // A 404 here means there is no error information for this message.
+  let errorText: string;
+  try {
+    errorText = (await odataGetRaw(config, `${base}/$value`, "text/plain")).trim();
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("404")) {
+      return null;
+    }
+    throw err;
+  }
+
+  // The failing model step id is a nice-to-have; ignore failures fetching it.
+  let lastErrorModelStepId: string | undefined;
+  try {
+    const meta = await odataGet<{ d: { LastErrorModelStepId?: string } }>(
+      config,
+      base,
+      { $format: "json" },
+    );
+    lastErrorModelStepId = meta?.d?.LastErrorModelStepId ?? undefined;
+  } catch {
+    // best-effort only
+  }
+
+  return { messageGuid, lastErrorModelStepId, errorText };
 }
 
 /**
