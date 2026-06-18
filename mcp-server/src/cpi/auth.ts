@@ -21,11 +21,23 @@ interface CachedToken {
   expiresAt: number; // epoch ms
 }
 
-let cachedToken: CachedToken | null = null;
-let inflightRequest: Promise<string> | null = null;
+// Tokens are cached per client id so that multiple CPI tenants (multi-tenant
+// dashboard) never share or overwrite each other's token.
+const tokenCache = new Map<string, CachedToken>();
+const inflightRequests = new Map<string, Promise<string>>();
 
 /** Safety margin: refresh 60 seconds before actual expiry. */
 const EXPIRY_MARGIN_MS = 60_000;
+
+/**
+ * Cache key includes the secret so that the same client id with a different
+ * (e.g. mistyped or rotated) secret is treated as different credentials. This
+ * keeps "test connection" honest: a wrong secret cannot reuse a previously
+ * cached valid token.
+ */
+function cacheKey(clientId: string, clientSecret: string): string {
+  return `${clientId}\n${clientSecret}`;
+}
 
 async function fetchNewToken(
   tokenUrl: string,
@@ -45,14 +57,14 @@ async function fetchNewToken(
 
     const { access_token, expires_in } = response.data;
 
-    cachedToken = {
+    tokenCache.set(cacheKey(clientId, clientSecret), {
       accessToken: access_token,
       expiresAt: Date.now() + expires_in * 1000 - EXPIRY_MARGIN_MS,
-    };
+    });
 
     return access_token;
   } catch (err) {
-    cachedToken = null;
+    tokenCache.delete(cacheKey(clientId, clientSecret));
 
     if (err instanceof AxiosError) {
       const status = err.response?.status;
@@ -92,21 +104,25 @@ export async function getAccessToken(
   clientId: string,
   clientSecret: string,
 ): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    return cachedToken.accessToken;
+  const key = cacheKey(clientId, clientSecret);
+  const cached = tokenCache.get(key);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.accessToken;
   }
 
-  if (!inflightRequest) {
-    inflightRequest = fetchNewToken(tokenUrl, clientId, clientSecret).finally(() => {
-      inflightRequest = null;
+  let inflight = inflightRequests.get(key);
+  if (!inflight) {
+    inflight = fetchNewToken(tokenUrl, clientId, clientSecret).finally(() => {
+      inflightRequests.delete(key);
     });
+    inflightRequests.set(key, inflight);
   }
 
-  return inflightRequest;
+  return inflight;
 }
 
 /** Reset all cached state. Exposed for testing. */
 export function resetAuthState(): void {
-  cachedToken = null;
-  inflightRequest = null;
+  tokenCache.clear();
+  inflightRequests.clear();
 }

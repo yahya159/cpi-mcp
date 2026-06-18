@@ -3,7 +3,17 @@
 // Currently selected time window (hours). Default: last 24h.
 let currentHours = 24;
 
+// Which saved connection this dashboard targets (from ?conn=<id> in the URL).
+// Empty → the server falls back to the .env tenant.
+const CONN_ID = new URLSearchParams(location.search).get("conn") || "";
+
 const $ = (sel) => document.querySelector(sel);
+
+// Append the connection id to an API path so the server queries the right tenant.
+function api(path) {
+  if (!CONN_ID) return path;
+  return path + (path.includes("?") ? "&" : "?") + "conn=" + encodeURIComponent(CONN_ID);
+}
 
 async function getJSON(url) {
   const res = await fetch(url);
@@ -69,9 +79,9 @@ async function refresh() {
   main.classList.add("spin");
   try {
     const [health, failed, recent] = await Promise.all([
-      getJSON(`/api/health-summary?lastHours=${currentHours}`),
-      getJSON(`/api/failed?lastHours=${currentHours}&top=100`),
-      getJSON(`/api/recent?top=20`),
+      getJSON(api(`/api/health-summary?lastHours=${currentHours}`)),
+      getJSON(api(`/api/failed?lastHours=${currentHours}&top=100`)),
+      getJSON(api(`/api/recent?top=20`)),
     ]);
 
     renderCards(health);
@@ -99,7 +109,7 @@ function showStatus(kind, message) {
 
 async function checkConnection() {
   try {
-    const data = await getJSON("/api/check");
+    const data = await getJSON(api("/api/check"));
     $("#tenant").textContent = data.baseUrl || "(tenant unknown)";
     showStatus("ok", "Connected to SAP CPI OData API.");
     setTimeout(() => showStatus("", ""), 2500);
@@ -115,7 +125,7 @@ async function openError(guid) {
   $("#errStep").textContent = "—";
   $("#errText").textContent = "Loading…";
   try {
-    const d = await getJSON(`/api/error/${encodeURIComponent(guid)}`);
+    const d = await getJSON(api(`/api/error/${encodeURIComponent(guid)}`));
     $("#errStep").textContent = d.lastErrorModelStepId || "—";
     $("#errText").textContent = d.errorText || "(empty)";
   } catch (err) {

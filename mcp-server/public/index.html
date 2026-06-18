@@ -3,80 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SAP CPI Monitoring Dashboard</title>
+    <title>SAP CPI Monitoring — Connections</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <header class="topbar">
       <div>
         <h1>SAP CPI Monitoring</h1>
-        <p id="tenant" class="tenant">Connecting…</p>
+        <p class="tenant">Manage your Integration Suite connections</p>
       </div>
-      <button id="checkBtn" class="btn ghost">Test connection</button>
     </header>
 
     <main>
-      <section class="controls">
-        <span class="controls-label">Time window:</span>
-        <button class="btn range" data-hours="24">Last 24 hours</button>
-        <button class="btn range" data-hours="168">Last 7 days</button>
-        <button class="btn range" data-hours="720">Last 30 days</button>
-        <span class="spacer"></span>
-        <button id="refreshBtn" class="btn primary">Refresh</button>
-      </section>
-
-      <section id="status" class="status hidden"></section>
-
-      <!-- Health summary cards -->
-      <section class="cards" id="cards"></section>
-
-      <!-- Failed messages -->
+      <!-- Saved connections -->
       <section class="panel">
-        <h2>Failed / escalated messages <span id="failedCount" class="pill">0</span></h2>
-        <div class="table-wrap">
-          <table id="failedTable">
-            <thead>
-              <tr>
-                <th>iFlow</th><th>Status</th><th>Start</th><th>Message GUID</th><th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <h2>Your connections <span id="connCount" class="pill">0</span></h2>
+        <div id="connList" class="conn-list">
+          <p class="empty">No connections yet. Add one below.</p>
         </div>
       </section>
 
-      <!-- Recent messages -->
+      <!-- Add a connection -->
       <section class="panel">
-        <h2>Recent messages</h2>
-        <div class="table-wrap">
-          <table id="recentTable">
-            <thead>
-              <tr>
-                <th>iFlow</th><th>Status</th><th>Start</th><th>Message GUID</th><th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+        <h2>Add a connection</h2>
+
+        <div class="uploader" id="dropZone">
+          <input type="file" id="fileInput" accept="application/json,.json" hidden />
+          <p>
+            <strong>Upload the service-key JSON</strong>
+            <span class="muted">(the file containing <code>clientid</code>, <code>clientsecret</code>, <code>url</code>, <code>tokenurl</code>)</span>
+          </p>
+          <button class="btn" id="browseBtn" type="button">Choose file…</button>
+          <span id="fileName" class="muted"></span>
+          <p class="muted small">Drag &amp; drop the JSON here, or fill the fields manually below.</p>
         </div>
+
+        <form id="connForm" class="form" autocomplete="off">
+          <div class="field">
+            <label for="name">Connection name</label>
+            <input type="text" id="name" placeholder="e.g. Trial tenant" />
+          </div>
+          <div class="field">
+            <label for="apiBaseUrl">API Base URL <span class="muted">(url)</span></label>
+            <input type="text" id="apiBaseUrl" placeholder="https://<tenant>.it-cpitrial05.cfapps.us10-001.hana.ondemand.com" />
+          </div>
+          <div class="field">
+            <label for="tokenUrl">Token URL <span class="muted">(tokenurl)</span></label>
+            <input type="text" id="tokenUrl" placeholder="https://<subdomain>.authentication.us10.hana.ondemand.com/oauth/token" />
+          </div>
+          <div class="field">
+            <label for="clientId">Client ID <span class="muted">(clientid)</span></label>
+            <input type="text" id="clientId" placeholder="sb-xxxx...!bNNNN|it!bNNNN" />
+          </div>
+          <div class="field">
+            <label for="clientSecret">Client Secret <span class="muted">(clientsecret)</span></label>
+            <input type="password" id="clientSecret" placeholder="••••••••" />
+          </div>
+
+          <div class="form-actions">
+            <button type="button" id="testBtn" class="btn">Test connection</button>
+            <button type="button" id="saveBtn" class="btn primary" disabled>Save connection</button>
+          </div>
+          <div id="formStatus" class="status hidden"></div>
+        </form>
       </section>
     </main>
 
-    <!-- Error details drawer -->
-    <div id="drawer" class="drawer hidden">
-      <div class="drawer-panel">
-        <div class="drawer-head">
-          <h3>Error details</h3>
-          <button id="drawerClose" class="btn ghost">✕</button>
-        </div>
-        <div class="drawer-body">
-          <p><strong>Message:</strong> <span id="errGuid" class="mono"></span></p>
-          <p><strong>Failing step:</strong> <span id="errStep" class="mono">—</span></p>
-          <p><strong>Last error:</strong></p>
-          <pre id="errText" class="error-text">Loading…</pre>
-        </div>
-      </div>
-    </div>
-
-    <script src="app.js"></script>
+    <script src="connections.js"></script>
   </body>
 </html>

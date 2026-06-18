@@ -155,8 +155,7 @@ interface ODataCollection<T> {
 const METADATA_MAX_CHARS = 8_000;
 
 /** Fetch $metadata XML. Returns a trimmed summary string. */
-export async function fetchMetadata(): Promise<string> {
-  const config = getConfig();
+export async function fetchMetadata(config: CpiConfig = getConfig()): Promise<string> {
   const raw = await odataGetRaw(config, "/api/v1/$metadata");
 
   if (raw.length <= METADATA_MAX_CHARS) return raw;
@@ -183,9 +182,8 @@ export async function fetchMetadata(): Promise<string> {
 /** Fetch recent MessageProcessingLogs. */
 export async function fetchRecentMessages(
   top: number,
+  config: CpiConfig = getConfig(),
 ): Promise<MessageProcessingLog[]> {
-  const config = getConfig();
-
   // $orderby=LogStart desc is the standard way to get newest first.
   // If the tenant does not support $orderby on LogStart, remove the param.
   const data = await odataGet<ODataCollection<MessageProcessingLog>>(
@@ -212,8 +210,8 @@ export async function fetchRecentMessages(
 export async function fetchFailedMessages(
   top: number,
   lastHours: number,
+  config: CpiConfig = getConfig(),
 ): Promise<MessageProcessingLog[]> {
-  const config = getConfig();
   const since = toODataDateTime(new Date(Date.now() - lastHours * 3600_000));
 
   const filter = [
@@ -247,9 +245,8 @@ export async function fetchMessagesByIflow(
   iflowName: string,
   top: number,
   lastHours?: number,
+  config: CpiConfig = getConfig(),
 ): Promise<MessageProcessingLog[]> {
-  const config = getConfig();
-
   // Escape single quotes in the iFlow name for OData safety
   const safeName = iflowName.replace(/'/g, "''");
 
@@ -278,6 +275,7 @@ export async function fetchMessagesByIflow(
 /** Fetch a single message by its GUID. */
 export async function fetchMessageById(
   messageGuid: string,
+  config: CpiConfig = getConfig(),
 ): Promise<MessageProcessingLog | null> {
   if (!isValidMessageId(messageGuid)) {
     throw new Error(
@@ -285,7 +283,6 @@ export async function fetchMessageById(
     );
   }
 
-  const config = getConfig();
   const path = `/api/v1/MessageProcessingLogs('${messageGuid}')`;
 
   try {
@@ -323,6 +320,7 @@ export interface MessageErrorDetails {
  */
 export async function fetchErrorDetails(
   messageGuid: string,
+  config: CpiConfig = getConfig(),
 ): Promise<MessageErrorDetails | null> {
   if (!isValidMessageId(messageGuid)) {
     throw new Error(
@@ -330,7 +328,6 @@ export async function fetchErrorDetails(
     );
   }
 
-  const config = getConfig();
   const base = `/api/v1/MessageProcessingLogs('${messageGuid}')/ErrorInformation`;
 
   // The long error body is exposed as a text/plain media resource ($value).
@@ -366,8 +363,8 @@ export async function fetchErrorDetails(
  */
 export async function fetchLastErrorForIflow(
   iflowName: string,
+  config: CpiConfig = getConfig(),
 ): Promise<MessageProcessingLog | null> {
-  const config = getConfig();
   const safeName = iflowName.replace(/'/g, "''");
 
   const filter = [
@@ -398,7 +395,10 @@ const HEALTH_MAX_MESSAGES = 5000;
  * Build a health summary across all messages in a time window.
  * Pages through OData results via __next to avoid silently capping counts.
  */
-export async function fetchHealthSummary(lastHours: number): Promise<{
+export async function fetchHealthSummary(
+  lastHours: number,
+  config: CpiConfig = getConfig(),
+): Promise<{
   period: string;
   totalMessages: number;
   completedMessages: number;
@@ -415,7 +415,6 @@ export async function fetchHealthSummary(lastHours: number): Promise<{
   } | null;
   healthStatus: "HEALTHY" | "WARNING" | "CRITICAL";
 }> {
-  const config = getConfig();
   const since = toODataDateTime(new Date(Date.now() - lastHours * 3600_000));
   const filter = `LogStart gt ${since}`;
 

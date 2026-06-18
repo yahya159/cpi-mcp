@@ -160,25 +160,46 @@ npm run web
 
 Then open **http://localhost:5174** (override with `WEB_PORT`).
 
-Features:
-- Connection check showing which tenant you are pointed at.
+### Connections page (multi-tenant)
+
+The landing page (`/`) manages **Integration Suite connections**:
+
+1. **Add a connection** by either **uploading the service-key JSON** (the file with
+   `clientid` / `clientsecret` / `url` / `tokenurl` — it is parsed in the browser and fills the
+   form) **or filling the fields manually**.
+2. Click **Test connection** — the server performs the OAuth handshake and one OData call. A
+   wrong secret or URL fails here.
+3. If the test passes, **Save** the connection. It is stored **server-side** in
+   `connections.json`; the browser only keeps the connection **id**.
+4. Click **Open** on a saved connection → redirects to `dashboard.html?conn=<id>`.
+
+> 🔒 `connections.json` contains client secrets in plain text, so it is **gitignored**. The API
+> only ever returns `id`, `name`, and `apiBaseUrl` to the browser — never the secret.
+
+### Dashboard page
+
+`dashboard.html?conn=<id>` shows monitoring data for the selected connection:
 - Time-window buttons: **Last 24 hours / 7 days / 30 days**.
 - Health summary cards (total / completed / failed / escalated + HEALTHY/WARNING/CRITICAL).
 - Tables of failed and recent messages with human-readable timestamps.
-- **View error** on any failed message opens a panel with the full "Last Error" text and the failing step id.
+- **View error** on any failed message opens a panel with the full "Last Error" text and failing step id.
 
-REST endpoints (used by the frontend, also callable directly):
+### REST endpoints
+
+Dashboard endpoints take an optional `?conn=<id>` (saved connection). Without it they use the
+tenant from `.env`.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/check` | Connectivity + current tenant base URL |
-| `GET /api/recent?top=20` | Recent messages |
-| `GET /api/failed?lastHours=24&top=100` | Failed/escalated in a window |
-| `GET /api/health-summary?lastHours=24` | Aggregated health summary |
-| `GET /api/error/:guid` | Full error text for one message |
-
-> This dashboard uses the single tenant configured in `.env`. Letting a user connect to *any*
-> tenant by entering their own service-key values (multi-tenant) is a separate enhancement.
+| `GET /api/connections` | List saved connections (no secrets) |
+| `POST /api/connections/test` | Test credentials without saving |
+| `POST /api/connections` | Save a connection (after validating) |
+| `DELETE /api/connections/:id` | Remove a connection |
+| `GET /api/check?conn=` | Connectivity + tenant base URL |
+| `GET /api/recent?top=20&conn=` | Recent messages |
+| `GET /api/failed?lastHours=24&top=100&conn=` | Failed/escalated in a window |
+| `GET /api/health-summary?lastHours=24&conn=` | Aggregated health summary |
+| `GET /api/error/:guid?conn=` | Full error text for one message |
 
 ## Testing $metadata
 
@@ -233,9 +254,10 @@ sap-cpi-monitoring-mcp/
 │   │   ├── web.ts                # Local web dashboard (Express HTTP layer)
 │   │   ├── server.ts             # McpServer creation and tool registration
 │   │   ├── cpi/
-│   │   │   ├── auth.ts           # OAuth2 client credentials with token caching
+│   │   │   ├── auth.ts           # OAuth2 client credentials, per-client token cache
 │   │   │   ├── odata.ts          # Low-level OData HTTP client
-│   │   │   ├── cpiClient.ts      # High-level CPI API methods
+│   │   │   ├── cpiClient.ts      # High-level CPI API methods (config-injectable)
+│   │   │   ├── connectionsStore.ts # Saved multi-tenant connections (server-side)
 │   │   │   └── messageLogs.ts    # Log formatting helpers
 │   │   └── tools/
 │   │       ├── checkMetadata.ts
@@ -247,9 +269,11 @@ sap-cpi-monitoring-mcp/
 │   │       ├── getLastErrorForIflow.ts
 │   │       └── getHealthSummary.ts
 │   ├── public/                   # Web dashboard frontend (HTML/CSS/JS)
-│   │   ├── index.html
-│   │   ├── style.css
-│   │   └── app.js
+│   │   ├── index.html            # Connections manager (landing page)
+│   │   ├── connections.js        # Connections page logic
+│   │   ├── dashboard.html        # Monitoring dashboard (per connection)
+│   │   ├── app.js                # Dashboard logic
+│   │   └── style.css
 │   ├── .env.example
 │   ├── package.json
 │   └── tsconfig.json

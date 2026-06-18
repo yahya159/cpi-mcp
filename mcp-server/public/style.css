@@ -159,3 +159,58 @@ tbody tr:hover { background: var(--panel-2); }
 
 .hidden { display: none !important; }
 .spin { opacity: 0.5; pointer-events: none; }
+
+/* --- Connections page --- */
+.topbar-actions { display: flex; gap: 10px; align-items: center; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+code {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.conn-list { display: flex; flex-direction: column; gap: 12px; }
+.conn-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.conn-name { font-weight: 600; font-size: 15px; }
+.conn-url { color: var(--muted); margin-top: 3px; word-break: break-all; }
+.conn-actions { display: flex; gap: 8px; flex-shrink: 0; }
+a.btn { text-decoration: none; display: inline-block; }
+
+.uploader {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.uploader.drag { border-color: var(--primary); background: rgba(59,130,246,0.08); }
+.uploader p { margin: 0 0 10px; font-size: 14px; }
+.uploader .small { margin-top: 10px; }
+
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; color: var(--muted); }
+.field input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+.field input:focus { outline: none; border-color: var(--primary); }
+.form-actions { display: flex; gap: 10px; margin-top: 4px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
