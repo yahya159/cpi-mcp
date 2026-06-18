@@ -1,128 +1,128 @@
 # SAP CPI Monitoring MCP Server
 
-An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that connects to **SAP Integration Suite / Cloud Integration (CPI)** monitoring APIs and exposes iFlow execution data, Message Processing Logs, failure analysis, and health summaries as MCP tools.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server for SAP Integration Suite / Cloud Integration (CPI) monitoring.
 
-## Architecture
+The server connects to SAP CPI monitoring APIs and exposes iFlow execution data, Message Processing Logs, failure details, and health summaries as MCP tools.
 
+## Guides
+
+- [Deployment and Agent Guide](./DEPLOYMENT_AND_AGENT_GUIDE.md) - full production guide covering SAP BTP services, HANA persistence, Cloud Foundry deployment, credentials, and agent setup.
+- [External Agent Connection Guide](./CONNECT_EXTERNAL_AGENT.md) - shorter handoff guide for connecting another PC, agent, or MCP client.
+- [Technical Documentation](./TECHNICAL_DOCUMENTATION.md) - codebase walkthrough, folder responsibilities, runtime flows, and implementation details.
+- [Client Setup](./CLIENT_SETUP.md) - local client setup for users running the server on their own machine.
+- [Cloud Foundry Deployment Notes](./CF_DEPLOY.md) - focused Cloud Foundry deployment checklist.
+
+## Deployed Architecture
+
+```text
+AI agent / IDE / client
+  -> HTTPS Streamable HTTP MCP endpoint (/mcp)
+  -> SAP BTP Cloud Foundry app: sap-cpi-monitoring-mcp
+  -> SAP CPI OData API (/api/v1/MessageProcessingLogs)
+  -> SAP HANA Cloud schema service for saved CPI connections
 ```
+
+## Local Architecture
+
+```text
 +------------------+       stdio        +-----------------------+      HTTPS/OAuth2     +------------------------+
-|   MCP Client     | <----------------> |   MCP Server          | <------------------> |  SAP CPI OData API     |
-|  (test only)     |    MCP Protocol    |  (sap-cpi-monitoring) |   Client Credentials  |  /api/v1/              |
-+------------------+                    +-----------------------+                       |  MessageProcessingLogs |
-                                                                                        |  $metadata             |
+| MCP client       | <----------------> | MCP server            | <------------------> | SAP CPI OData API     |
+| (test/local)     |    MCP protocol    | sap-cpi-monitoring    | client credentials   | /api/v1/              |
++------------------+                    +-----------------------+                       | MessageProcessingLogs |
+                                                                                        | $metadata             |
                                                                                         +------------------------+
 ```
 
-**Key principles:**
-- The MCP server handles all SAP authentication and API calls.
-- The MCP client never sees SAP credentials or calls CPI directly.
+## Key Principles
+
+- The MCP server handles SAP authentication and API calls.
+- MCP clients never receive SAP credentials and never call CPI directly.
 - OAuth2 tokens are cached in memory and refreshed automatically.
-- All secrets come from environment variables, never hardcoded.
-
-## Why an MCP Client?
-
-The MCP client included in this project is **only for local testing**. In production, the MCP server would be consumed by an AI assistant (e.g. Claude Desktop, VS Code + Claude, or another MCP-compatible host). The test client lets you verify connectivity and tool behavior without needing an AI host.
-
-## How the MCP Server Connects to SAP Integration Suite
-
-The server uses the **SAP CPI OData API** exposed by the **Process Integration Runtime** service instance on SAP BTP. Authentication uses **OAuth2 Client Credentials** flow with credentials from the service key.
-
-### SAP BTP Setup
-
-1. **Create a Service Instance:**
-   - Go to SAP BTP Cockpit > your subaccount > Service Marketplace.
-   - Find **Process Integration Runtime**.
-   - Create an instance with plan **`api`** — this is the plan that grants access to the
-     monitoring **OData API** (`/api/v1/...`).
-   - Under instance parameters you may add the monitoring role:
-     ```json
-     {
-       "roles": ["MonitoringDataRead"]
-     }
-     ```
-
-   > ⚠️ **Plan matters — use `api`, not `integration-flow`.**
-   > The `integration-flow` plan is for *sending messages to deployed iFlows at runtime*. Its
-   > service key `url` points at the **runtime** host (`...-rt.cfapps...`) and its token is
-   > **rejected (401)** by the OData API. Tokens from the `api`-plan instance are what the
-   > `/api/v1/MessageProcessingLogs` endpoint accepts. If you previously created an
-   > `integration-flow` instance and got 404s on `/api/v1/...` or a flat `Unauthorized`, this
-   > is why.
-
-2. **Create a Service Key:**
-   - On the service instance, create a service key.
-   - The key will contain: `url` (API base), `tokenurl`, `clientid`, `clientsecret`.
-
-3. **Required Roles/Scopes:**
-   - With the `api` plan, the default scopes (`IntegrationOperationServer.read`,
-     `NodeManager.read`, etc.) already grant read access to Message Processing Logs.
-     `MonitoringDataRead` is a useful explicit role to add but may not be strictly required
-     depending on tenant version.
-
-   > 💡 **`CPI_API_BASE_URL` is the Tenant Management Node host** — the `url` field from the
-   > `api`-plan service key, e.g.
-   > `https://<tenant>.it-cpitrial05.cfapps.us10-001.hana.ondemand.com` (note: **no `-rt`**).
-   > Do not use the Integration Suite browser/tooling URL.
+- Secrets come from environment variables, service keys, or saved connection storage. They are not hardcoded.
+- Remote MCP sessions are multi-tenant: each session selects an active CPI connection with `connect_cpi` or `use_connection`.
 
 ## Available MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `check_cpi_metadata` | Verify CPI API connectivity and retrieve OData metadata summary |
-| `get_recent_messages` | Get recent Message Processing Logs (newest first) |
-| `get_failed_messages` | Get failed/escalated messages within a time window |
+| `connect_cpi` | Validate CPI service-key values, activate them for the session, and optionally save them |
+| `use_connection` | Activate a previously saved CPI connection by id |
+| `list_connections` | List saved CPI connections without secrets |
+| `current_connection` | Show which CPI connection the current MCP session is using |
+| `check_cpi_metadata` | Verify CPI API connectivity and retrieve an OData metadata summary |
+| `get_recent_messages` | Get recent Message Processing Logs, newest first |
+| `get_failed_messages` | Get failed or escalated messages within a time window |
 | `get_messages_by_iflow` | Get messages for a specific iFlow by name |
-| `get_message_by_id` | Get detailed info for a single message by its GUID |
-| `get_message_error_details` | Get the full "Last Error" text (and failing step id) for a message by its GUID |
-| `get_last_error_for_iflow` | Get the most recent error for a specific iFlow |
-| `get_cpi_health_summary` | Generate a health summary with counts and status |
+| `get_message_by_id` | Get detailed information for one message by GUID |
+| `get_message_error_details` | Get the full "Last Error" text and failing step id for a message |
+| `get_last_error_for_iflow` | Get the most recent failed or escalated message for an iFlow |
+| `get_cpi_health_summary` | Generate a health summary with message counts and status |
 
-> **Typical failure-analysis flow:** call `get_last_error_for_iflow` (or `get_failed_messages`)
-> to find a failing message and its `MessageGuid`, then pass that GUID to
-> `get_message_error_details` to read the actual error / stack trace.
+Typical failure-analysis flow:
 
-## Setup
+```text
+get_failed_messages or get_last_error_for_iflow
+  -> copy MessageGuid
+  -> get_message_error_details
+```
+
+## SAP BTP Requirements
+
+Create a **Process Integration Runtime** service instance with plan **`api`**.
+
+Do not use the `integration-flow` plan for monitoring. That plan is for sending runtime messages to deployed iFlows. Its service key commonly points to a `...-rt.cfapps...` runtime host, and its token is rejected by the monitoring OData API.
+
+Recommended instance parameters:
+
+```json
+{
+  "roles": ["MonitoringDataRead"]
+}
+```
+
+The service key must provide:
+
+| Service-key field | Used as |
+|-------------------|---------|
+| `url` | `CPI_API_BASE_URL` / `apiBaseUrl` |
+| `tokenurl` | `CPI_TOKEN_URL` / `tokenUrl` |
+| `clientid` | `CPI_CLIENT_ID` / `clientId` |
+| `clientsecret` | `CPI_CLIENT_SECRET` / `clientSecret` |
+
+`CPI_API_BASE_URL` must be the Tenant Management Node host from the `api`-plan service key. It should not contain `-rt`.
+
+## Local Setup
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- An SAP BTP subaccount with SAP Integration Suite enabled
-- A Process Integration Runtime service instance with a service key
+- Node.js 18+
+- npm
+- SAP Integration Suite enabled in SAP BTP
+- Process Integration Runtime service instance with plan `api`
+- Service key for that instance
 
-### 1. Clone and Install
+### Install
 
 ```bash
-# Install MCP server dependencies
 cd mcp-server
 npm install
 
-# Install MCP client dependencies (for testing)
 cd ../mcp-client
 npm install
 ```
 
-### 2. Configure Environment Variables
+### Configure Environment
 
-```bash
-cd mcp-server
-cp .env.example .env
-```
-
-Edit `.env` with values from your SAP BTP service key:
+Create `mcp-server/.env`:
 
 ```env
-# Base URL — the "url" field from the api-plan service key (Tenant Management Node, no -rt)
 CPI_API_BASE_URL=https://<tenant>.it-cpitrialNN.cfapps.<region>.hana.ondemand.com
-
-# Token URL — the "tokenurl" field from the service key
 CPI_TOKEN_URL=https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/token
-
-# Client credentials — "clientid" and "clientsecret" from the service key
-CPI_CLIENT_ID=sb-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx!bXXXX|it!bXXXX
-CPI_CLIENT_SECRET=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+CPI_CLIENT_ID=<service-key-clientid>
+CPI_CLIENT_SECRET=<service-key-clientsecret>
 ```
 
-### 3. Build and Run the MCP Server
+### Run the Local MCP Server
 
 ```bash
 cd mcp-server
@@ -131,26 +131,20 @@ npm run dev
 
 The server starts in stdio mode and waits for MCP protocol messages on stdin/stdout.
 
-### 4. Run the Test Client
+### Run the Test Client
 
-In a **separate terminal**:
+In a separate terminal:
 
 ```bash
 cd mcp-client
 npm run dev
 ```
 
-The client spawns the MCP server as a child process, connects via stdio, and calls the test tools.
+The test client starts the MCP server as a child process, connects over stdio, lists tools, and calls the main monitoring tools.
 
-> **Note:** the test client launches the server child process with `mcp-server` as its working
-> directory, so the server's `dotenv` finds `mcp-server/.env`. (Build the server at least once —
-> `npm run build` in `mcp-server` — before running the client, since it runs `dist/index.js`.)
+## Local Web Dashboard
 
-## Web Dashboard (local)
-
-A simple browser dashboard is included for visual, click-driven monitoring. It is a thin
-HTTP layer (`src/web.ts`, Express) over the **same** `cpiClient` functions the MCP tools use —
-so the browser never sees SAP credentials (they stay in `mcp-server/.env`).
+A browser dashboard is included for visual monitoring. It is a thin Express layer over the same `cpiClient` functions used by the MCP tools.
 
 ```bash
 cd mcp-server
@@ -158,141 +152,104 @@ npm install
 npm run web
 ```
 
-Then open **http://localhost:5174** (override with `WEB_PORT`).
+Open:
 
-### Connections page (multi-tenant)
+```text
+http://localhost:5174
+```
 
-The landing page (`/`) manages **Integration Suite connections**:
+The dashboard has:
 
-1. **Add a connection** by either **uploading the service-key JSON** (the file with
-   `clientid` / `clientsecret` / `url` / `tokenurl` — it is parsed in the browser and fills the
-   form) **or filling the fields manually**.
-2. Click **Test connection** — the server performs the OAuth handshake and one OData call. A
-   wrong secret or URL fails here.
-3. If the test passes, **Save** the connection. It is stored **server-side** in
-   `connections.json`; the browser only keeps the connection **id**.
-4. Click **Open** on a saved connection → redirects to `dashboard.html?conn=<id>`.
+- A connections page for uploading or entering SAP service-key values.
+- A connection test step that validates OAuth and the OData API before saving.
+- Server-side saved connections.
+- A dashboard page with health cards, recent messages, failed messages, and error details.
 
-> 🔒 `connections.json` contains client secrets in plain text, so it is **gitignored**. The API
-> only ever returns `id`, `name`, and `apiBaseUrl` to the browser — never the secret.
+Local saved connections are written to `mcp-server/connections.json` when no HANA binding exists. That file contains secrets and is gitignored.
 
-### Dashboard page
+## Dashboard REST Endpoints
 
-`dashboard.html?conn=<id>` shows monitoring data for the selected connection:
-- Time-window buttons: **Last 24 hours / 7 days / 30 days**.
-- Health summary cards (total / completed / failed / escalated + HEALTHY/WARNING/CRITICAL).
-- Tables of failed and recent messages with human-readable timestamps.
-- **View error** on any failed message opens a panel with the full "Last Error" text and failing step id.
-
-### REST endpoints
-
-Dashboard endpoints take an optional `?conn=<id>` (saved connection). Without it they use the
-tenant from `.env`.
+Dashboard endpoints accept an optional `?conn=<id>` parameter. Without it, they use the tenant from `.env`.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/connections` | List saved connections (no secrets) |
+| `GET /api/connections` | List saved connections without secrets |
 | `POST /api/connections/test` | Test credentials without saving |
-| `POST /api/connections` | Save a connection (after validating) |
-| `DELETE /api/connections/:id` | Remove a connection |
-| `GET /api/check?conn=` | Connectivity + tenant base URL |
+| `POST /api/connections` | Save a validated connection |
+| `DELETE /api/connections/:id` | Delete a saved connection |
+| `GET /api/check?conn=` | Connectivity check and tenant base URL |
 | `GET /api/recent?top=20&conn=` | Recent messages |
-| `GET /api/failed?lastHours=24&top=100&conn=` | Failed/escalated in a window |
+| `GET /api/failed?lastHours=24&top=100&conn=` | Failed or escalated messages |
 | `GET /api/health-summary?lastHours=24&conn=` | Aggregated health summary |
 | `GET /api/error/:guid?conn=` | Full error text for one message |
 
-## Testing $metadata
+## Project Structure
 
-Before relying on specific OData field names, verify what your tenant exposes:
-
-1. Start the server and client as described above.
-2. The client calls `check_cpi_metadata` first, which hits `/api/v1/$metadata`.
-3. Review the output — it shows entity types and confirms connectivity.
-4. For full metadata inspection, you can also call the endpoint directly in a browser or via curl (with a valid Bearer token).
-
-## Adapting OData Field Names
-
-SAP CPI OData field names can vary between tenant versions. The code uses these standard property names:
-
-- `MessageGuid` — unique message identifier
-- `IntegrationFlowName` — name of the iFlow/integration artifact
-- `Status` — COMPLETED, FAILED, ESCALATED, etc.
-- `LogStart` / `LogEnd` — timestamps
-- `Sender` / `Receiver` — communication parties
-- `CorrelationId` — correlation identifier
-- `ApplicationMessageId` — business message ID
-
-If your tenant uses different names:
-
-1. Call `check_cpi_metadata` to inspect the actual entity properties.
-2. Update the `MessageProcessingLog` interface in `mcp-server/src/cpi/cpiClient.ts`.
-3. Update the field mapping in `mcp-server/src/cpi/messageLogs.ts`.
-4. Update OData `$filter` and `$orderby` parameters in the query methods.
+```text
+cpi-monitoring-mcp/
+  mcp-server/
+    src/
+      index.ts                 local stdio MCP entry point
+      http.ts                  deployed Streamable HTTP MCP entry point
+      web.ts                   local browser dashboard
+      server.ts                MCP server creation and tool registration
+      cpi/
+        auth.ts                OAuth2 client-credentials token cache
+        odata.ts               low-level SAP OData HTTP client
+        cpiClient.ts           high-level CPI monitoring functions
+        connectionsStore.ts    file/HANA store facade
+        connectionsStore.hana.ts
+        sessionContext.ts      active CPI connection per MCP session
+        messageLogs.ts         message summary mapping
+      tools/                   MCP tool registrations
+    public/                    dashboard HTML/CSS/JS
+    manifest.yml               Cloud Foundry manifest
+  mcp-client/
+    src/index.ts               local stdio test client
+```
 
 ## Troubleshooting
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Missing environment variable: CPI_*` | `.env` file not configured | Copy `.env.example` to `.env` and fill in values |
-| `OAuth authentication failed (401)` | Wrong client ID or secret | Verify credentials from service key |
-| `OAuth forbidden (403)` | Missing roles/scopes | Ensure service instance has `MonitoringDataRead` role |
-| `Cannot reach token endpoint` | Wrong token URL or network issue | Check `CPI_TOKEN_URL` and network/proxy settings |
-| `CPI API returned 404` on `/api/v1/...` | Using the **runtime** host (`...-rt...`) from an `integration-flow`-plan key | Recreate the instance with the **`api`** plan; use its `url` (no `-rt`) |
-| Flat `Unauthorized` / 401 from `/api/v1/...` with a valid token | Token is from an `integration-flow`-plan instance (wrong audience) | Use an **`api`**-plan service key |
-| `CPI OData bad request (400)` | Filter syntax error | Field names may differ — check `$metadata` |
-| `Invalid MessageGuid format` | Tenant uses token-style ids, not UUIDs | Already handled — ids like `AGoyrc...` are accepted |
-| `Request timed out` | Network issue or firewall | Check connectivity to SAP BTP |
-| `ECONNREFUSED` | Server not reachable | Verify URL and that the CPI tenant is running |
+| Error | Likely cause | Fix |
+|-------|--------------|-----|
+| `Missing environment variable: CPI_*` | `.env` is missing or incomplete | Create `mcp-server/.env` and fill all required values |
+| `OAuth authentication failed (401)` | Wrong client ID or secret | Recopy values from the service key |
+| `OAuth forbidden (403)` | Missing role or scope | Add `MonitoringDataRead` or verify service-key scopes |
+| `CPI API returned 404` on `/api/v1/...` | Wrong base URL or `integration-flow` service key | Use a Process Integration Runtime `api` service key with no `-rt` URL |
+| Flat `Unauthorized` from `/api/v1/...` | Token has wrong audience | Use an `api`-plan service key |
+| `CPI OData bad request (400)` | Filter or field-name mismatch | Call `check_cpi_metadata` and verify tenant metadata |
+| `Request timed out` | Network, proxy, or firewall issue | Verify access to SAP BTP endpoints |
 
-## Project Structure
+## Production Deployment
 
-```
-sap-cpi-monitoring-mcp/
-├── mcp-server/
-│   ├── src/
-│   │   ├── index.ts              # Entry point, env validation, stdio transport
-│   │   ├── web.ts                # Local web dashboard (Express HTTP layer)
-│   │   ├── server.ts             # McpServer creation and tool registration
-│   │   ├── cpi/
-│   │   │   ├── auth.ts           # OAuth2 client credentials, per-client token cache
-│   │   │   ├── odata.ts          # Low-level OData HTTP client
-│   │   │   ├── cpiClient.ts      # High-level CPI API methods (config-injectable)
-│   │   │   ├── connectionsStore.ts # Saved multi-tenant connections (server-side)
-│   │   │   └── messageLogs.ts    # Log formatting helpers
-│   │   └── tools/
-│   │       ├── checkMetadata.ts
-│   │       ├── getRecentMessages.ts
-│   │       ├── getFailedMessages.ts
-│   │       ├── getMessagesByIflow.ts
-│   │       ├── getMessageById.ts
-│   │       ├── getMessageErrorDetails.ts
-│   │       ├── getLastErrorForIflow.ts
-│   │       └── getHealthSummary.ts
-│   ├── public/                   # Web dashboard frontend (HTML/CSS/JS)
-│   │   ├── index.html            # Connections manager (landing page)
-│   │   ├── connections.js        # Connections page logic
-│   │   ├── dashboard.html        # Monitoring dashboard (per connection)
-│   │   ├── app.js                # Dashboard logic
-│   │   └── style.css
-│   ├── .env.example
-│   ├── package.json
-│   └── tsconfig.json
-├── mcp-client/
-│   ├── src/
-│   │   └── index.ts              # Test client
-│   ├── package.json
-│   └── tsconfig.json
-├── .gitignore
-└── README.md
+The production path is implemented by:
+
+```text
+mcp-server/src/http.ts
+mcp-server/manifest.yml
 ```
 
-## Future: Deploying to SAP BTP Cloud Foundry
+Cloud Foundry runs:
 
-For production use, the MCP server should be deployed as a Cloud Foundry application with **Streamable HTTP transport** instead of stdio:
+```bash
+node dist/http.js
+```
 
-1. **Change the transport:** Replace `StdioServerTransport` with an HTTP-based transport (e.g. Express + Streamable HTTP transport from the MCP SDK).
-2. **Add a `manifest.yml`** for CF deployment with environment variables bound via service bindings or user-provided services.
-3. **Bind the Process Integration Runtime service** directly in CF instead of using `.env` — credentials will be available via `VCAP_SERVICES`.
-4. **Add authentication** to the HTTP endpoint itself (e.g. via XSUAA / SAP Authorization and Trust Management).
+The deployed app exposes:
 
-Stdio is simpler for local development and testing. Streamable HTTP is the correct choice for remote/server deployments where the MCP client and server run on different machines.
+```text
+GET    /health
+POST   /mcp
+GET    /mcp
+DELETE /mcp
+```
+
+Saved CPI connections are persisted in a bound SAP HANA Cloud `schema` service named `cpi-mcp-db` by default.
+
+Remote clients authenticate with:
+
+```http
+Authorization: Bearer <MCP_AUTH_TOKEN>
+```
+
+For production commands and agent-specific setup, use [DEPLOYMENT_AND_AGENT_GUIDE.md](./DEPLOYMENT_AND_AGENT_GUIDE.md).

@@ -1,46 +1,44 @@
-# Client Setup — SAP CPI Monitoring MCP Server
+# Client Setup - SAP CPI Monitoring MCP Server
 
-This guide is for **each client** who wants to use the SAP CPI Monitoring MCP
-server from their own AI host (Claude Desktop / Claude Code). You run the server
-**locally on your own machine** with **your own** SAP credentials.
+Use this guide when each user runs the SAP CPI Monitoring MCP server locally from their own AI host, such as Claude Desktop or Claude Code.
 
-> 🔒 **Your credentials never leave your machine.** They live only in your local
-> config file below. Nothing is sent to the server's author or any shared host.
+In this setup, the server runs on the user's own machine with that user's SAP credentials.
 
----
+> Security: your SAP credentials stay on your machine. They live only in your local AI host configuration or local `.env` file.
 
-## What you need
+## Requirements
 
-1. **Node.js 18+** installed (`node --version` to check).
-2. **An SAP BTP service key** from a *Process Integration Runtime* instance
-   created with the **`api`** plan (not `integration-flow`). The key gives you
-   four values:
+1. Node.js 18 or newer.
+2. An SAP BTP service key from a **Process Integration Runtime** instance created with plan **`api`**.
+3. The following service-key fields:
 
-   | Service-key field | Used as env var |
-   |-------------------|-----------------|
-   | `url`             | `CPI_API_BASE_URL` (Tenant Management Node, **no `-rt`**) |
-   | `tokenurl`        | `CPI_TOKEN_URL` |
-   | `clientid`        | `CPI_CLIENT_ID` |
-   | `clientsecret`    | `CPI_CLIENT_SECRET` |
+| Service-key field | Environment variable |
+|-------------------|----------------------|
+| `url` | `CPI_API_BASE_URL` |
+| `tokenurl` | `CPI_TOKEN_URL` |
+| `clientid` | `CPI_CLIENT_ID` |
+| `clientsecret` | `CPI_CLIENT_SECRET` |
 
-   > ⚠️ Use the **`api`**-plan key. An `integration-flow`-plan key points at the
-   > `...-rt.cfapps...` runtime host and is rejected (401) by the monitoring API.
+Use the `api` plan, not `integration-flow`.
 
----
+The `integration-flow` plan points to a `...-rt.cfapps...` runtime host and is rejected by the monitoring OData API. The monitoring tools need the Tenant Management Node API host from the `api`-plan service key.
 
-## Option 1 — Install via `npx` (recommended, once published)
+## Option 1: Install with `npx`
 
-You don't clone anything. Your AI host launches the server on demand with `npx`.
+Use this option after the package is published to npm.
+
+The AI host starts the MCP server on demand with `npx`.
 
 ### Claude Desktop
 
-Edit your config file:
+Edit the Claude Desktop configuration file:
 
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-  (e.g. `C:\Users\<you>\AppData\Roaming\Claude\claude_desktop_config.json`)
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+| OS | Config path |
+|----|-------------|
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
-Add (or merge) this block, filling in **your** service-key values:
+Add or merge this block:
 
 ```json
 {
@@ -59,7 +57,7 @@ Add (or merge) this block, filling in **your** service-key values:
 }
 ```
 
-Then **fully quit and reopen Claude Desktop**.
+Fully quit and reopen Claude Desktop after editing the file.
 
 ### Claude Code
 
@@ -67,16 +65,14 @@ Then **fully quit and reopen Claude Desktop**.
 claude mcp add sap-cpi-monitoring \
   --env CPI_API_BASE_URL=https://<your-tenant>...hana.ondemand.com \
   --env CPI_TOKEN_URL=https://<your-subdomain>.authentication.<region>.hana.ondemand.com/oauth/token \
-  --env CPI_CLIENT_ID=<your clientid> \
-  --env CPI_CLIENT_SECRET=<your clientsecret> \
+  --env CPI_CLIENT_ID=<your-clientid> \
+  --env CPI_CLIENT_SECRET=<your-clientsecret> \
   -- npx -y sap-cpi-monitoring-mcp-server
 ```
 
----
+## Option 2: Install from Source
 
-## Option 2 — Install from source (private distribution / not on npm)
-
-If the package is **not** published to npm, install it from the repo:
+Use this option if the package is private or not published to npm.
 
 ```bash
 git clone <repo-url> sap-cpi-monitoring-mcp
@@ -85,7 +81,7 @@ npm install
 npm run build
 ```
 
-Then point your AI host at the built file with an **absolute path**:
+Then point your AI host at the compiled server file with an absolute path:
 
 ```json
 {
@@ -104,48 +100,47 @@ Then point your AI host at the built file with an **absolute path**:
 }
 ```
 
-> The `env` block is the **only** place your credentials live. You can also put
-> them in a local `mcp-server/.env` file instead (copy `.env.example`), but the
-> `env` block is cleaner because it ties the credentials to your AI host config.
+The `env` block is the only place your credentials need to live. You can also use a local `mcp-server/.env` file, but the AI host `env` block is usually clearer because the credentials are tied directly to that MCP server configuration.
 
----
-
-## Verify it works
+## Verify the Setup
 
 1. Restart your AI host.
-2. Look for the MCP / tools indicator (🔌). You should see `sap-cpi-monitoring`
-   with 8 tools.
-3. Ask, in chat:
-   - *"Check my CPI connectivity"* → calls `check_cpi_metadata`
-   - *"Show me failed CPI messages in the last 24 hours"* → `get_failed_messages`
-   - *"Give me a CPI health summary"* → `get_cpi_health_summary`
+2. Check that the MCP tools indicator shows `sap-cpi-monitoring`.
+3. Ask one of these prompts:
 
-If the tools don't appear, the server most likely failed to start because a
-`CPI_*` value is missing or wrong — check the four values against your service key.
+```text
+Check my CPI connectivity.
+```
 
----
+```text
+Show me failed CPI messages in the last 24 hours.
+```
 
-## Available tools
+```text
+Give me a CPI health summary.
+```
+
+If the tools do not appear, the server most likely failed to start because one of the `CPI_*` values is missing or wrong.
+
+## Available Tools
 
 | Tool | What it does |
 |------|--------------|
-| `check_cpi_metadata` | Verify connectivity + OData metadata summary |
-| `get_recent_messages` | Recent Message Processing Logs (newest first) |
-| `get_failed_messages` | Failed/escalated messages in a time window |
-| `get_messages_by_iflow` | Messages for a specific iFlow by name |
-| `get_message_by_id` | Detail for one message by GUID |
-| `get_message_error_details` | Full "Last Error" text + failing step for a GUID |
-| `get_last_error_for_iflow` | Most recent error for a specific iFlow |
-| `get_cpi_health_summary` | Aggregated health summary (counts + status) |
-
----
+| `check_cpi_metadata` | Verifies connectivity and returns an OData metadata summary |
+| `get_recent_messages` | Lists recent Message Processing Logs, newest first |
+| `get_failed_messages` | Lists failed or escalated messages in a time window |
+| `get_messages_by_iflow` | Lists messages for a specific iFlow by name |
+| `get_message_by_id` | Returns detail for one message by GUID |
+| `get_message_error_details` | Returns full "Last Error" text and failing step for a GUID |
+| `get_last_error_for_iflow` | Finds the most recent error for a specific iFlow |
+| `get_cpi_health_summary` | Returns aggregated health counts and status |
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| Tools don't appear in the host | Server failed to start | A `CPI_*` value is missing/wrong; check all four |
-| `OAuth authentication failed (401)` | Wrong `clientid`/`clientsecret` | Re-copy from the service key |
-| `OAuth forbidden (403)` | Missing role | Add `MonitoringDataRead` to the service instance |
-| `404` on `/api/v1/...` | Using an `integration-flow`-plan key (`-rt` host) | Recreate the instance with the **`api`** plan |
-| `Cannot reach token endpoint` | Wrong `CPI_TOKEN_URL` or proxy | Verify the token URL and your network |
+| Tools do not appear | Server failed to start | Check that all four `CPI_*` values are present and correct |
+| `OAuth authentication failed (401)` | Wrong `clientid` or `clientsecret` | Recopy values from the service key |
+| `OAuth forbidden (403)` | Missing role or scope | Add `MonitoringDataRead` or verify service-key scopes |
+| `404` on `/api/v1/...` | Wrong service key plan or `-rt` host | Recreate the service instance with plan `api` |
+| `Cannot reach token endpoint` | Wrong `CPI_TOKEN_URL`, proxy, or network issue | Verify the token URL and network access |
