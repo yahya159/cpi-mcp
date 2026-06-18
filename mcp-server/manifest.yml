@@ -1,0 +1,25 @@
+---
+applications:
+  - name: sap-cpi-monitoring-mcp
+    memory: 256M
+    disk_quota: 512M
+    instances: 1
+    buildpacks:
+      - nodejs_buildpack
+    # The HTTP/Streamable transport is the deployable one. CF injects $PORT.
+    command: node dist/http.js
+    health-check-type: http
+    health-check-http-endpoint: /health
+    env:
+      # Production deps only at runtime; dist is prebuilt and pushed.
+      NPM_CONFIG_PRODUCTION: "true"
+      OPTIMIZE_MEMORY: "true"
+    # Bearer token that AI clients must send (Authorization: Bearer <token>).
+    # Set the real value out-of-band so it is not committed:
+    #   cf set-env sap-cpi-monitoring-mcp MCP_AUTH_TOKEN "<a-long-random-secret>"
+    #   cf restage sap-cpi-monitoring-mcp
+    #
+    # HANA-backed connection store (schema-plan service). Keeps saved
+    # connections across restarts and lets instances scale > 1.
+    services:
+      - cpi-mcp-db

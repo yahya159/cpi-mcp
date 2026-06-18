@@ -7,8 +7,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchHealthSummary } from "../cpi/cpiClient.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetHealthSummary(server: McpServer): void {
+export function registerGetHealthSummary(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_cpi_health_summary",
     {
@@ -28,7 +29,7 @@ export function registerGetHealthSummary(server: McpServer): void {
     },
     async ({ lastHours }) => {
       try {
-        const summary = await fetchHealthSummary(lastHours);
+        const summary = await fetchHealthSummary(lastHours, ctx.requireConfig());
         return {
           content: [
             {

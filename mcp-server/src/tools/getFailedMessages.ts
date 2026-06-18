@@ -8,8 +8,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchFailedMessages } from "../cpi/cpiClient.js";
 import { toMessageSummaries } from "../cpi/messageLogs.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetFailedMessages(server: McpServer): void {
+export function registerGetFailedMessages(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_failed_messages",
     {
@@ -34,7 +35,7 @@ export function registerGetFailedMessages(server: McpServer): void {
     },
     async ({ top, lastHours }) => {
       try {
-        const logs = await fetchFailedMessages(top, lastHours);
+        const logs = await fetchFailedMessages(top, lastHours, ctx.requireConfig());
         if (logs.length === 0) {
           return {
             content: [

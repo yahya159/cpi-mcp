@@ -70,10 +70,10 @@ function intParam(value: unknown, def: number, min: number, max: number): number
  * `?conn=<id>` selects a saved connection; otherwise the .env tenant is used.
  * Throws a 400-style error if the connection id is unknown.
  */
-function resolveConfig(req: Request): CpiConfig {
+async function resolveConfig(req: Request): Promise<CpiConfig> {
   const connId = req.query.conn;
   if (typeof connId === "string" && connId.length > 0) {
-    const conn = getConnection(connId);
+    const conn = await getConnection(connId);
     if (!conn) {
       throw Object.assign(new Error("Unknown connection id."), { status: 404 });
     }
@@ -111,7 +111,7 @@ function configFromBody(body: unknown): CpiConfig {
 app.get(
   "/api/connections",
   handle(async (_req, res) => {
-    res.json(listConnections());
+    res.json(await listConnections());
   }),
 );
 
@@ -139,14 +139,14 @@ app.post(
       new URL(config.apiBaseUrl).hostname.split(".")[0];
     // Validate before persisting.
     await fetchMetadata(config);
-    res.status(201).json(addConnection({ name, ...config }));
+    res.status(201).json(await addConnection({ name, ...config }));
   }),
 );
 
 app.delete(
   "/api/connections/:id",
   handle(async (req, res) => {
-    const ok = deleteConnection(req.params.id);
+    const ok = await deleteConnection(req.params.id);
     res.status(ok ? 200 : 404).json({ ok });
   }),
 );
@@ -158,7 +158,7 @@ app.delete(
 app.get(
   "/api/check",
   handle(async (req, res) => {
-    const config = resolveConfig(req);
+    const config = await resolveConfig(req);
     const summary = await fetchMetadata(config);
     res.json({ ok: true, baseUrl: config.apiBaseUrl, summary });
   }),
@@ -168,7 +168,7 @@ app.get(
   "/api/recent",
   handle(async (req, res) => {
     const top = intParam(req.query.top, 20, 1, 100);
-    const logs = await fetchRecentMessages(top, resolveConfig(req));
+    const logs = await fetchRecentMessages(top, await resolveConfig(req));
     res.json(toMessageSummaries(logs));
   }),
 );
@@ -178,7 +178,7 @@ app.get(
   handle(async (req, res) => {
     const lastHours = intParam(req.query.lastHours, 24, 1, 8760);
     const top = intParam(req.query.top, 50, 1, 100);
-    const logs = await fetchFailedMessages(top, lastHours, resolveConfig(req));
+    const logs = await fetchFailedMessages(top, lastHours, await resolveConfig(req));
     res.json(toMessageSummaries(logs));
   }),
 );
@@ -187,14 +187,14 @@ app.get(
   "/api/health-summary",
   handle(async (req, res) => {
     const lastHours = intParam(req.query.lastHours, 24, 1, 8760);
-    res.json(await fetchHealthSummary(lastHours, resolveConfig(req)));
+    res.json(await fetchHealthSummary(lastHours, await resolveConfig(req)));
   }),
 );
 
 app.get(
   "/api/error/:guid",
   handle(async (req, res) => {
-    const details = await fetchErrorDetails(req.params.guid, resolveConfig(req));
+    const details = await fetchErrorDetails(req.params.guid, await resolveConfig(req));
     if (!details) {
       res.status(404).json({ error: "No error information for this message." });
       return;

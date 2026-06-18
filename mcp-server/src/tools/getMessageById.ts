@@ -8,8 +8,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchMessageById } from "../cpi/cpiClient.js";
 import { toMessageSummary } from "../cpi/messageLogs.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetMessageById(server: McpServer): void {
+export function registerGetMessageById(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_message_by_id",
     {
@@ -28,7 +29,7 @@ export function registerGetMessageById(server: McpServer): void {
     },
     async ({ messageGuid }) => {
       try {
-        const log = await fetchMessageById(messageGuid);
+        const log = await fetchMessageById(messageGuid, ctx.requireConfig());
         if (!log) {
           return {
             content: [

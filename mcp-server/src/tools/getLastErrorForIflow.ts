@@ -8,8 +8,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchLastErrorForIflow } from "../cpi/cpiClient.js";
 import { toMessageSummary } from "../cpi/messageLogs.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetLastErrorForIflow(server: McpServer): void {
+export function registerGetLastErrorForIflow(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_last_error_for_iflow",
     {
@@ -25,7 +26,7 @@ export function registerGetLastErrorForIflow(server: McpServer): void {
     },
     async ({ iflowName }) => {
       try {
-        const log = await fetchLastErrorForIflow(iflowName);
+        const log = await fetchLastErrorForIflow(iflowName, ctx.requireConfig());
         if (!log) {
           return {
             content: [

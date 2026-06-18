@@ -8,8 +8,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchErrorDetails } from "../cpi/cpiClient.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetMessageErrorDetails(server: McpServer): void {
+export function registerGetMessageErrorDetails(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_message_error_details",
     {
@@ -30,7 +31,7 @@ export function registerGetMessageErrorDetails(server: McpServer): void {
     },
     async ({ messageGuid }) => {
       try {
-        const details = await fetchErrorDetails(messageGuid);
+        const details = await fetchErrorDetails(messageGuid, ctx.requireConfig());
         if (!details) {
           return {
             content: [

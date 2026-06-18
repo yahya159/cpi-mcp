@@ -6,8 +6,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { fetchMetadata } from "../cpi/cpiClient.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerCheckMetadata(server: McpServer): void {
+export function registerCheckMetadata(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "check_cpi_metadata",
     {
@@ -18,7 +19,7 @@ export function registerCheckMetadata(server: McpServer): void {
     },
     async () => {
       try {
-        const summary = await fetchMetadata();
+        const summary = await fetchMetadata(ctx.requireConfig());
         return {
           content: [
             {

@@ -1,0 +1,14 @@
+# Installed fresh by the buildpack on staging.
+node_modules/
+
+# Never push secrets — set these via `cf set-env` / a bound service instead.
+.env
+connections.json
+
+# Local-only artifacts.
+*.log
+.DS_Store
+Thumbs.db
+
+# Source maps / declaration maps are not needed at runtime.
+dist/**/*.map

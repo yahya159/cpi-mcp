@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Entry point for the SAP CPI Monitoring MCP Server.
  *
@@ -11,6 +12,8 @@
 import "dotenv/config";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
+import { getConfig } from "./cpi/cpiClient.js";
+import { SessionContext } from "./cpi/sessionContext.js";
 
 async function main(): Promise<void> {
   // Validate required env vars early so failures are clear
@@ -30,7 +33,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const server = createServer();
+  // Single-tenant (stdio): seed the session context from the CPI_* env vars so
+  // the monitoring tools work immediately without an explicit connect step.
+  const ctx = new SessionContext(getConfig(), "env");
+  const server = createServer(ctx);
 
   // Use stdio transport for local development
   const transport = new StdioServerTransport();

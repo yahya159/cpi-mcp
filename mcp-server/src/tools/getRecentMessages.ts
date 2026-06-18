@@ -8,8 +8,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchRecentMessages } from "../cpi/cpiClient.js";
 import { toMessageSummaries } from "../cpi/messageLogs.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetRecentMessages(server: McpServer): void {
+export function registerGetRecentMessages(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_recent_messages",
     {
@@ -28,7 +29,7 @@ export function registerGetRecentMessages(server: McpServer): void {
     },
     async ({ top }) => {
       try {
-        const logs = await fetchRecentMessages(top);
+        const logs = await fetchRecentMessages(top, ctx.requireConfig());
         if (logs.length === 0) {
           return {
             content: [{ type: "text" as const, text: "No recent messages found." }],

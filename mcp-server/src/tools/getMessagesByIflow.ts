@@ -8,8 +8,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchMessagesByIflow } from "../cpi/cpiClient.js";
 import { toMessageSummaries } from "../cpi/messageLogs.js";
+import type { SessionContext } from "../cpi/sessionContext.js";
 
-export function registerGetMessagesByIflow(server: McpServer): void {
+export function registerGetMessagesByIflow(server: McpServer, ctx: SessionContext): void {
   server.registerTool(
     "get_messages_by_iflow",
     {
@@ -38,7 +39,7 @@ export function registerGetMessagesByIflow(server: McpServer): void {
     },
     async ({ iflowName, top, lastHours }) => {
       try {
-        const logs = await fetchMessagesByIflow(iflowName, top, lastHours);
+        const logs = await fetchMessagesByIflow(iflowName, top, lastHours, ctx.requireConfig());
         if (logs.length === 0) {
           return {
             content: [
