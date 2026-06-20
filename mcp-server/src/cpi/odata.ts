@@ -7,6 +7,7 @@
 
 import axios, { AxiosError } from "axios";
 import { getAccessToken } from "./auth.js";
+import { CPI_READ_ROLE_HINT } from "./roles.js";
 
 /** Extract the human-readable message from an OData v2 JSON error envelope. */
 function extractODataError(data: unknown): string {
@@ -72,7 +73,7 @@ export async function odataGet<T = unknown>(
       }
       if (status === 403) {
         throw new Error(
-          `CPI API returned 403 Forbidden. Ensure the service key has MonitoringDataRead role.${detail ? ` Detail: ${detail}` : ""}`,
+          `CPI API returned 403 Forbidden. Ensure the Process Integration Runtime api-plan service key has the required read role for this endpoint (${CPI_READ_ROLE_HINT}).${detail ? ` Detail: ${detail}` : ""}`,
         );
       }
       if (status === 404) {
@@ -137,6 +138,11 @@ export async function odataGetRaw(
       const status = err.response?.status;
       if (status === 401) {
         throw new Error("CPI raw request returned 401. Check credentials.");
+      }
+      if (status === 403) {
+        throw new Error(
+          `CPI raw request returned 403. Ensure the Process Integration Runtime api-plan service key has the required read role for this endpoint (${CPI_READ_ROLE_HINT}).`,
+        );
       }
       if (status === 404) {
         throw new Error(

@@ -11,6 +11,7 @@
  */
 
 import { CpiConfig, odataGet, odataGetRaw } from "./odata.js";
+import { CPI_READ_ROLES } from "./roles.js";
 
 // ---------------------------------------------------------------------------
 // OData v2 helpers & constants
@@ -154,9 +155,25 @@ interface ODataCollection<T> {
 
 const METADATA_MAX_CHARS = 8_000;
 
+/** Fetch raw $metadata XML. */
+export async function fetchMetadataRaw(config: CpiConfig = getConfig()): Promise<string> {
+  return odataGetRaw(config, "/api/v1/$metadata");
+}
+
+/** Extract EntitySet names from OData v2 metadata XML. */
+function extractEntitySetNames(metadataXml: string): string[] {
+  const entitySetRe = /<EntitySet\s+[^>]*Name="([^"]+)"/g;
+  const names: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = entitySetRe.exec(metadataXml)) !== null) {
+    names.push(match[1]);
+  }
+  return names;
+}
+
 /** Fetch $metadata XML. Returns a trimmed summary string. */
 export async function fetchMetadata(config: CpiConfig = getConfig()): Promise<string> {
-  const raw = await odataGetRaw(config, "/api/v1/$metadata");
+  const raw = await fetchMetadataRaw(config);
 
   if (raw.length <= METADATA_MAX_CHARS) return raw;
 
@@ -177,6 +194,128 @@ export async function fetchMetadata(config: CpiConfig = getConfig()): Promise<st
     "Full metadata is available but truncated for readability.",
     "Use the raw $metadata endpoint in a browser to inspect all properties.",
   ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Role / permission checks
+// ---------------------------------------------------------------------------
+
+export type CpiPermissionStatus =
+  | "ok"
+  | "forbidden"
+  | "unavailable"
+  | "failed"
+  | "not_verified";
+
+export interface CpiPermissionCheck {
+  role: (typeof CPI_READ_ROLES)[number];
+  capability: string;
+  endpoint: string;
+  status: CpiPermissionStatus;
+  detail: string;
+}
+
+function statusFromProbeError(err: unknown): Pick<CpiPermissionCheck, "status" | "detail"> {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes("403")) {
+    return { status: "forbidden", detail: message };
+  }
+  if (message.includes("404")) {
+    return { status: "unavailable", detail: message };
+  }
+  return { status: "failed", detail: message };
+}
+
+async function probeReadEndpoint(
+  config: CpiConfig,
+  role: CpiPermissionCheck["role"],
+  capability: string,
+  endpoint: string,
+  params: Record<string, string> = { $top: "1", $format: "json" },
+): Promise<CpiPermissionCheck> {
+  try {
+    await odataGet(config, endpoint, params);
+    return {
+      role,
+      capability,
+      endpoint,
+      status: "ok",
+      detail: "Read probe succeeded.",
+    };
+  } catch (err) {
+    const { status, detail } = statusFromProbeError(err);
+    return { role, capability, endpoint, status, detail };
+  }
+}
+
+async function probeHealthCheckRole(
+  config: CpiConfig,
+): Promise<CpiPermissionCheck> {
+  let entitySets: string[];
+  try {
+    entitySets = extractEntitySetNames(await fetchMetadataRaw(config));
+  } catch (err) {
+    const { status, detail } = statusFromProbeError(err);
+    return {
+      role: "HealthCheckMonitoringDataRead",
+      capability: "Health-check monitoring data",
+      endpoint: "/api/v1/$metadata",
+      status,
+      detail,
+    };
+  }
+
+  const candidate = entitySets.find((name) =>
+    /(health|jms|queue|messaging)/i.test(name),
+  );
+
+  if (!candidate) {
+    return {
+      role: "HealthCheckMonitoringDataRead",
+      capability: "Health-check monitoring data",
+      endpoint: "/api/v1/$metadata",
+      status: "not_verified",
+      detail:
+        "No obvious health-check entity set was found in this tenant's /api/v1/$metadata. " +
+        "SAP documents this role for health-check monitoring metrics such as JMS queue statistics and certificate expiry dates, but this MCP could not safely identify a tenant-specific endpoint.",
+    };
+  }
+
+  return probeReadEndpoint(
+    config,
+    "HealthCheckMonitoringDataRead",
+    "Health-check monitoring data",
+    `/api/v1/${candidate}`,
+  );
+}
+
+/** Probe the read-only capabilities covered by the recommended api-plan roles. */
+export async function checkCpiReadPermissions(
+  config: CpiConfig = getConfig(),
+): Promise<CpiPermissionCheck[]> {
+  const checks = await Promise.all([
+    probeReadEndpoint(
+      config,
+      "MonitoringDataRead",
+      "Message Processing Logs",
+      "/api/v1/MessageProcessingLogs",
+    ),
+    probeReadEndpoint(
+      config,
+      "MessagePayloadsRead",
+      "Persisted message payloads",
+      "/api/v1/MessageStoreEntries",
+    ),
+    probeReadEndpoint(
+      config,
+      "WorkspacePackagesRead",
+      "Integration packages",
+      "/api/v1/IntegrationPackages",
+    ),
+    probeHealthCheckRole(config),
+  ]);
+
+  return checks;
 }
 
 /** Fetch recent MessageProcessingLogs. */
@@ -297,6 +436,173 @@ export async function fetchMessageById(
     }
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Message Store / persisted payloads
+// ---------------------------------------------------------------------------
+
+export interface MessageStoreEntry {
+  MessageStoreEntryId?: string;
+  Id?: string;
+  MessageGuid?: string;
+  IntegrationFlowName?: string;
+  StepId?: string;
+  LogStart?: string;
+  LogEnd?: string;
+  CreatedAt?: string;
+  RetainUntil?: string;
+  [key: string]: unknown;
+}
+
+export interface MessageStoreEntrySummary {
+  entryId: string;
+  messageGuid: string;
+  stepId: string;
+  integrationFlowName: string;
+  logStart: string;
+  logEnd: string;
+  createdAt: string;
+  retainUntil: string;
+}
+
+function getMessageStoreEntryId(entry: MessageStoreEntry): string {
+  const metadata = entry.__metadata as { uri?: unknown } | undefined;
+  const metadataUri = typeof metadata?.uri === "string" ? metadata.uri : "";
+  const uriMatch = /MessageStoreEntries\('([^']+)'\)/.exec(metadataUri);
+
+  const candidates = [
+    entry.MessageStoreEntryId,
+    entry.Id,
+    uriMatch?.[1],
+    entry.MessageGuid,
+  ];
+
+  return candidates.find((value) => typeof value === "string" && value.length > 0) ?? "";
+}
+
+export function toMessageStoreEntrySummary(
+  entry: MessageStoreEntry,
+): MessageStoreEntrySummary {
+  return {
+    entryId: getMessageStoreEntryId(entry),
+    messageGuid: String(entry.MessageGuid ?? ""),
+    stepId: String(entry.StepId ?? entry.StepID ?? entry.Name ?? "N/A"),
+    integrationFlowName: String(entry.IntegrationFlowName ?? "N/A"),
+    logStart: formatODataDate(entry.LogStart),
+    logEnd: formatODataDate(entry.LogEnd),
+    createdAt: formatODataDate(entry.CreatedAt),
+    retainUntil: formatODataDate(entry.RetainUntil ?? entry.RetentionUntil),
+  };
+}
+
+/** List persisted Message Store entries associated with one Message Processing Log. */
+export async function fetchMessageStoreEntries(
+  messageGuid: string,
+  top = 20,
+  config: CpiConfig = getConfig(),
+): Promise<MessageStoreEntry[]> {
+  if (!isValidMessageId(messageGuid)) {
+    throw new Error(
+      `Invalid MessageGuid format: "${messageGuid}". Expected a UUID or a CPI token id (letters, digits, '_' or '-').`,
+    );
+  }
+
+  const data = await odataGet<ODataCollection<MessageStoreEntry>>(
+    config,
+    `/api/v1/MessageProcessingLogs('${messageGuid}')/MessageStoreEntries`,
+    {
+      $top: String(top),
+      $format: "json",
+    },
+  );
+
+  return data?.d?.results ?? [];
+}
+
+/** Fetch raw payload content for one persisted Message Store entry. */
+export async function fetchMessageStorePayload(
+  entryId: string,
+  config: CpiConfig = getConfig(),
+): Promise<string> {
+  if (!isValidMessageId(entryId)) {
+    throw new Error(
+      `Invalid MessageStoreEntry id format: "${entryId}". Expected letters, digits, '_' or '-'.`,
+    );
+  }
+
+  return odataGetRaw(
+    config,
+    `/api/v1/MessageStoreEntries('${entryId}')/$value`,
+    "text/plain, application/json, application/xml, text/xml, */*",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Workspace packages
+// ---------------------------------------------------------------------------
+
+export interface IntegrationPackage {
+  Id?: string;
+  Name?: string;
+  Description?: string;
+  ShortText?: string;
+  Version?: string;
+  Vendor?: string;
+  Mode?: string;
+  SupportedPlatform?: string;
+  CreationDate?: string;
+  ModifiedDate?: string;
+  CreatedBy?: string;
+  ModifiedBy?: string;
+  [key: string]: unknown;
+}
+
+export interface IntegrationPackageSummary {
+  id: string;
+  name: string;
+  shortText: string;
+  version: string;
+  vendor: string;
+  mode: string;
+  supportedPlatform: string;
+  createdAt: string;
+  modifiedAt: string;
+  modifiedBy: string;
+}
+
+export function toIntegrationPackageSummary(
+  pkg: IntegrationPackage,
+): IntegrationPackageSummary {
+  return {
+    id: String(pkg.Id ?? ""),
+    name: String(pkg.Name ?? "N/A"),
+    shortText: String(pkg.ShortText ?? pkg.Description ?? ""),
+    version: String(pkg.Version ?? ""),
+    vendor: String(pkg.Vendor ?? ""),
+    mode: String(pkg.Mode ?? ""),
+    supportedPlatform: String(pkg.SupportedPlatform ?? ""),
+    createdAt: formatODataDate(pkg.CreationDate),
+    modifiedAt: formatODataDate(pkg.ModifiedDate),
+    modifiedBy: String(pkg.ModifiedBy ?? ""),
+  };
+}
+
+/** List Integration Suite workspace packages. */
+export async function fetchIntegrationPackages(
+  top: number,
+  config: CpiConfig = getConfig(),
+): Promise<IntegrationPackage[]> {
+  const data = await odataGet<ODataCollection<IntegrationPackage>>(
+    config,
+    "/api/v1/IntegrationPackages",
+    {
+      $top: String(top),
+      $format: "json",
+    },
+  );
+
+  return data?.d?.results ?? [];
 }
 
 /**

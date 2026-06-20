@@ -107,7 +107,12 @@ In SAP BTP Cockpit:
 
 ```json
 {
-  "roles": ["MonitoringDataRead"]
+  "roles": [
+    "MonitoringDataRead",
+    "MessagePayloadsRead",
+    "HealthCheckMonitoringDataRead",
+    "WorkspacePackagesRead"
+  ]
 }
 ```
 
@@ -328,7 +333,7 @@ clientSecret
 | No saved connections | HANA is empty or user has not saved a tenant | Call `connect_cpi` with service-key values and `save=true` |
 | CPI auth returns `401` | Wrong `clientid` or `clientsecret` | Recopy service-key values |
 | CPI API returns `404` | Wrong service key plan or wrong API base URL | Use Process Integration Runtime plan `api`, not `integration-flow` |
-| CPI API returns `403` | Missing monitoring role/scope | Add `MonitoringDataRead` or verify service-key scopes |
+| CPI API returns `403` | Missing CPI read role/scope | Add the recommended api-plan read roles or verify service-key scopes |
 | Claude Desktop connector fails | It cannot send bearer header | Use Claude Code/Codex, use query-token fallback for testing, or add OAuth |
 
 ## Security Rules

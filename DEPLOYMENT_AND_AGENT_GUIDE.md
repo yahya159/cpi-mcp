@@ -233,12 +233,18 @@ Recommended service instance parameter:
 
 ```json
 {
-  "roles": ["MonitoringDataRead"]
+  "roles": [
+    "MonitoringDataRead",
+    "MessagePayloadsRead",
+    "HealthCheckMonitoringDataRead",
+    "WorkspacePackagesRead"
+  ]
 }
 ```
 
 Depending on tenant version, the default api-plan scopes may already include
-read access, but adding `MonitoringDataRead` makes the intent explicit.
+some read access, but adding these roles makes the monitoring, payload,
+health-check, and package read intent explicit.
 
 Create a service key and collect these fields:
 
@@ -638,7 +644,7 @@ when no HANA binding exists. That file contains secrets and is gitignored.
 | Connection saves locally but not after CF restart | App used file fallback | Bind a HANA `schema` service and restage |
 | `OAuth authentication failed (401)` | Wrong CPI `clientid`/`clientsecret` | Recreate or recopy the Process Integration Runtime service key |
 | CPI API returns `404` | Wrong service plan or URL | Use Process Integration Runtime plan `api`; do not use `...-rt...` URLs |
-| CPI API returns `403` | Missing roles/scopes | Add `MonitoringDataRead` or verify service-key scopes |
+| CPI API returns `403` | Missing roles/scopes | Add the recommended api-plan read roles or verify service-key scopes |
 | `@sap/hana-client` load/connect failure | HANA service binding or native driver issue | Check service plan, credentials in `VCAP_SERVICES`, and staging logs |
 | Claude Desktop cannot add connector | It cannot send static bearer headers | Use query-token test URL, Claude Code, Codex, or add OAuth |
 

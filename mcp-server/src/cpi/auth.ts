@@ -9,6 +9,7 @@
  */
 
 import axios, { AxiosError } from "axios";
+import { CPI_READ_ROLE_HINT } from "./roles.js";
 
 interface TokenResponse {
   access_token: string;
@@ -75,7 +76,7 @@ async function fetchNewToken(
       }
       if (status === 403) {
         throw new Error(
-          "OAuth forbidden (403). The client may lack required scopes/roles.",
+          `OAuth forbidden (403). The client may lack required scopes/roles (${CPI_READ_ROLE_HINT}).`,
         );
       }
       if (err.code === "ECONNREFUSED" || err.code === "ENOTFOUND") {

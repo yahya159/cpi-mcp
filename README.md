@@ -50,13 +50,17 @@ AI agent / IDE / client
 | `list_connections` | List saved CPI connections without secrets |
 | `current_connection` | Show which CPI connection the current MCP session is using |
 | `check_cpi_metadata` | Verify CPI API connectivity and retrieve an OData metadata summary |
+| `check_cpi_permissions` | Probe the read permissions covered by the recommended api-plan roles |
 | `get_recent_messages` | Get recent Message Processing Logs, newest first |
 | `get_failed_messages` | Get failed or escalated messages within a time window |
 | `get_messages_by_iflow` | Get messages for a specific iFlow by name |
 | `get_message_by_id` | Get detailed information for one message by GUID |
 | `get_message_error_details` | Get the full "Last Error" text and failing step id for a message |
+| `get_message_store_entries` | List persisted Message Store entries for a message |
+| `get_message_store_payload` | Get persisted payload content for a Message Store entry |
 | `get_last_error_for_iflow` | Get the most recent failed or escalated message for an iFlow |
 | `get_cpi_health_summary` | Generate a health summary with message counts and status |
+| `list_integration_packages` | List Integration Suite workspace packages |
 
 Typical failure-analysis flow:
 
@@ -76,9 +80,23 @@ Recommended instance parameters:
 
 ```json
 {
-  "roles": ["MonitoringDataRead"]
+  "roles": [
+    "MonitoringDataRead",
+    "MessagePayloadsRead",
+    "HealthCheckMonitoringDataRead",
+    "WorkspacePackagesRead"
+  ]
 }
 ```
+
+Role usage in this MCP:
+
+| Role | Used for |
+|------|----------|
+| `MonitoringDataRead` | Message Processing Logs, failed/recent messages, message-based health summary |
+| `MessagePayloadsRead` | Persisted Message Store entries and payload content |
+| `HealthCheckMonitoringDataRead` | Health-check monitoring probe where a tenant exposes a matching health/JMS/certificate entity |
+| `WorkspacePackagesRead` | Integration package inventory |
 
 The service key must provide:
 
@@ -174,7 +192,7 @@ Dashboard endpoints accept an optional `?conn=<id>` parameter. Without it, they 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/connections` | List saved connections without secrets |
-| `POST /api/connections/test` | Test credentials without saving |
+| `POST /api/connections/test` | Test credentials and read-role probes without saving |
 | `POST /api/connections` | Save a validated connection |
 | `DELETE /api/connections/:id` | Delete a saved connection |
 | `GET /api/check?conn=` | Connectivity check and tenant base URL |
@@ -214,7 +232,7 @@ cpi-monitoring-mcp/
 |-------|--------------|-----|
 | `Missing environment variable: CPI_*` | `.env` is missing or incomplete | Create `mcp-server/.env` and fill all required values |
 | `OAuth authentication failed (401)` | Wrong client ID or secret | Recopy values from the service key |
-| `OAuth forbidden (403)` | Missing role or scope | Add `MonitoringDataRead` or verify service-key scopes |
+| `OAuth forbidden (403)` | Missing role or scope | Add the recommended api-plan roles or verify service-key scopes |
 | `CPI API returned 404` on `/api/v1/...` | Wrong base URL or `integration-flow` service key | Use a Process Integration Runtime `api` service key with no `-rt` URL |
 | Flat `Unauthorized` from `/api/v1/...` | Token has wrong audience | Use an `api`-plan service key |
 | `CPI OData bad request (400)` | Filter or field-name mismatch | Call `check_cpi_metadata` and verify tenant metadata |

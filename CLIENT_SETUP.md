@@ -141,6 +141,6 @@ If the tools do not appear, the server most likely failed to start because one o
 |---------|--------------|-----|
 | Tools do not appear | Server failed to start | Check that all four `CPI_*` values are present and correct |
 | `OAuth authentication failed (401)` | Wrong `clientid` or `clientsecret` | Recopy values from the service key |
-| `OAuth forbidden (403)` | Missing role or scope | Add `MonitoringDataRead` or verify service-key scopes |
+| `OAuth forbidden (403)` | Missing role or scope | Add the recommended api-plan read roles or verify service-key scopes |
 | `404` on `/api/v1/...` | Wrong service key plan or `-rt` host | Recreate the service instance with plan `api` |
 | `Cannot reach token endpoint` | Wrong `CPI_TOKEN_URL`, proxy, or network issue | Verify the token URL and network access |

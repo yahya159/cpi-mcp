@@ -17,7 +17,7 @@ import { z } from "zod";
 
 import type { SessionContext } from "../cpi/sessionContext.js";
 import type { CpiConfig } from "../cpi/odata.js";
-import { fetchMetadata } from "../cpi/cpiClient.js";
+import { checkCpiReadPermissions, fetchMetadata } from "../cpi/cpiClient.js";
 import {
   addConnection,
   getConnection,
@@ -29,6 +29,14 @@ function text(body: string, isError = false) {
     content: [{ type: "text" as const, text: body }],
     ...(isError ? { isError: true } : {}),
   };
+}
+
+function formatPermissionChecks(
+  checks: Awaited<ReturnType<typeof checkCpiReadPermissions>>,
+): string {
+  return checks
+    .map((check) => `- ${check.role}: ${check.status} (${check.capability})`)
+    .join("\n");
 }
 
 export function registerManageConnections(
@@ -82,8 +90,11 @@ export function registerManageConnections(
       };
 
       // Validate by performing the real OAuth handshake + one OData call.
+      let permissionReport = "";
       try {
         await fetchMetadata(config);
+        const checks = await checkCpiReadPermissions(config);
+        permissionReport = `\n\nPermission probes:\n${formatPermissionChecks(checks)}`;
       } catch (err) {
         return text(
           `Connection test FAILED. The credentials were not accepted by SAP CPI.\n` +
@@ -104,7 +115,8 @@ export function registerManageConnections(
         `Connected to "${name}" (${config.apiBaseUrl}).\n` +
           (savedId
             ? `Saved as connection id: ${savedId} (reuse later with use_connection).`
-            : `Not saved (save=false); active for this session only.`),
+            : `Not saved (save=false); active for this session only.`) +
+          permissionReport,
       );
     },
   );

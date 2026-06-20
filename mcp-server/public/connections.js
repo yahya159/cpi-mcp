@@ -30,6 +30,11 @@ function setStatus(kind, message) {
   el.textContent = message;
 }
 
+function formatRoleChecks(checks) {
+  if (!Array.isArray(checks) || checks.length === 0) return "";
+  return checks.map((c) => `${c.role}: ${c.status}`).join("; ");
+}
+
 // Any edit invalidates a previous successful test → must re-test before saving.
 function invalidateTest() {
   $("#saveBtn").disabled = true;
@@ -113,7 +118,13 @@ async function testConnection() {
       body: JSON.stringify(f),
     });
     if (result.ok) {
-      setStatus("ok", `Connection successful → ${result.apiBaseUrl}. You can save it now.`);
+      const roles = formatRoleChecks(result.roleChecks);
+      setStatus(
+        "ok",
+        `Connection successful → ${result.apiBaseUrl}.` +
+          (roles ? ` Role probes: ${roles}.` : "") +
+          " You can save it now.",
+      );
       $("#saveBtn").disabled = false;
     } else {
       setStatus("err", `Connection failed: ${result.error}`);

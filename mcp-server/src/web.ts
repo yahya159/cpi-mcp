@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   getConfig,
+  checkCpiReadPermissions,
   fetchMetadata,
   fetchRecentMessages,
   fetchFailedMessages,
@@ -122,7 +123,8 @@ app.post(
     const config = configFromBody(req.body);
     try {
       await fetchMetadata(config); // exercises OAuth + the OData API
-      res.json({ ok: true, apiBaseUrl: config.apiBaseUrl });
+      const roleChecks = await checkCpiReadPermissions(config);
+      res.json({ ok: true, apiBaseUrl: config.apiBaseUrl, roleChecks });
     } catch (err) {
       res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
