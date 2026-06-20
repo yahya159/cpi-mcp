@@ -204,6 +204,7 @@ export type CpiPermissionStatus =
   | "ok"
   | "forbidden"
   | "unavailable"
+  | "not_supported"
   | "failed"
   | "not_verified";
 
@@ -222,6 +223,13 @@ function statusFromProbeError(err: unknown): Pick<CpiPermissionCheck, "status" |
   }
   if (message.includes("404")) {
     return { status: "unavailable", detail: message };
+  }
+  if (message.includes("501")) {
+    return {
+      status: "not_supported",
+      detail:
+        `${message}. SAP accepted the token, but this tenant/API endpoint does not implement the probed read path.`,
+    };
   }
   return { status: "failed", detail: message };
 }
@@ -246,6 +254,43 @@ async function probeReadEndpoint(
     const { status, detail } = statusFromProbeError(err);
     return { role, capability, endpoint, status, detail };
   }
+}
+
+async function probeMessagePayloadsRole(
+  config: CpiConfig,
+): Promise<CpiPermissionCheck> {
+  let recent: MessageProcessingLog[];
+  try {
+    recent = await fetchRecentMessages(1, config);
+  } catch (err) {
+    const { status, detail } = statusFromProbeError(err);
+    return {
+      role: "MessagePayloadsRead",
+      capability: "Persisted message payloads",
+      endpoint: "/api/v1/MessageProcessingLogs",
+      status,
+      detail,
+    };
+  }
+
+  const messageGuid = recent[0]?.MessageGuid;
+  if (!messageGuid) {
+    return {
+      role: "MessagePayloadsRead",
+      capability: "Persisted message payloads",
+      endpoint: "/api/v1/MessageProcessingLogs('<MessageGuid>')/MessageStoreEntries",
+      status: "not_verified",
+      detail:
+        "No recent Message Processing Log was available to probe the per-message MessageStoreEntries endpoint.",
+    };
+  }
+
+  return probeReadEndpoint(
+    config,
+    "MessagePayloadsRead",
+    "Persisted message payloads",
+    `/api/v1/MessageProcessingLogs('${messageGuid}')/MessageStoreEntries`,
+  );
 }
 
 async function probeHealthCheckRole(
@@ -300,12 +345,7 @@ export async function checkCpiReadPermissions(
       "Message Processing Logs",
       "/api/v1/MessageProcessingLogs",
     ),
-    probeReadEndpoint(
-      config,
-      "MessagePayloadsRead",
-      "Persisted message payloads",
-      "/api/v1/MessageStoreEntries",
-    ),
+    probeMessagePayloadsRole(config),
     probeReadEndpoint(
       config,
       "WorkspacePackagesRead",
